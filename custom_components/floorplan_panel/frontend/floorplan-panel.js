@@ -1267,11 +1267,12 @@ function ze(t, e, i = {}) {
     })}
       </g>`;
   }
-  const a = ki(t, i.hass), c = `opening door ${!!i.forceOpen || a.open ? "open" : ""} ${a.unknown ? "unknown" : ""} ${i.selected ? "selected" : ""}`;
+  const a = ki(t, i.hass), l = !!i.forceOpen || a.open, c = `opening door ${l ? "open" : ""} ${a.unknown ? "unknown" : ""} ${i.selected ? "selected" : ""}`;
   return m`
     <g class=${c} data-id=${t.id} transform="translate(${t.x} ${t.y}) rotate(${t.angle})" style=${n}>
       <rect class="hit" x=${-s / 2} y=${r > 0 ? -e / 2 : -s} width=${s} height=${s + e / 2}></rect>
-      ${se(o * s / 2, o, s, r)}
+      ${l ? se(o * s / 2, o, s, r) : m`<rect class="frame" x=${-s / 2} y=${-(e - 2) / 2} width=${s} height=${e - 2}></rect>
+              <line class="leaf closed" x1=${-s / 2} y1="0" x2=${s / 2} y2="0"></line>`}
       ${Ci(t, i.hass)}
     </g>`;
 }
@@ -1293,6 +1294,7 @@ const Ce = `
   .opening.open .leaf, .seg.open .leaf { stroke: var(--fp-open, #ef6c00); }
   .opening.open .swing, .seg.open .swing { stroke: var(--fp-open, #ef6c00); stroke-width: 1.6; }
   .opening.window .leaf { stroke-width: 2.5; }
+  .opening.door .leaf.closed { stroke-width: 2.5; }
   .seg.open .frame { stroke: var(--fp-open, #ef6c00); fill: color-mix(in srgb, var(--fp-open, #ef6c00) 15%, var(--fp-floor-color, var(--card-background-color, #fff))); }
   .opening.unknown, .seg.unknown { opacity: .5; }
   .seg.sel .frame { stroke: var(--primary-color); stroke-width: 3; }

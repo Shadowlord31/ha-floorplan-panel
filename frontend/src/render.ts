@@ -174,14 +174,17 @@ export function renderOpening(
         })}
       </g>`;
   }
-  // Tür: Blatt im rechten Winkel zur Wand plus Viertelkreis bis zur geschlossenen Lage
+  // Tür: zu = Blatt in der Wandebene; offen = Blatt im rechten Winkel plus Viertelkreis
   const st = doorState(o, opts.hass);
   const open = !!opts.forceOpen || st.open;
   const cls = `opening door ${open ? "open" : ""} ${st.unknown ? "unknown" : ""} ${opts.selected ? "selected" : ""}`;
   return svg`
     <g class=${cls} data-id=${o.id} transform="translate(${o.x} ${o.y}) rotate(${o.angle})" style=${style}>
       <rect class="hit" x=${-L / 2} y=${s > 0 ? -cut / 2 : -L} width=${L} height=${L + cut / 2}></rect>
-      ${renderLeaf((h * L) / 2, h, L, s)}
+      ${open
+        ? renderLeaf((h * L) / 2, h, L, s)
+        : svg`<rect class="frame" x=${-L / 2} y=${-(cut - 2) / 2} width=${L} height=${cut - 2}></rect>
+              <line class="leaf closed" x1=${-L / 2} y1="0" x2=${L / 2} y2="0"></line>`}
       ${renderLock(o, opts.hass)}
     </g>`;
 }
@@ -210,6 +213,7 @@ export const planSvgStyles = `
   .opening.open .leaf, .seg.open .leaf { stroke: var(--fp-open, #ef6c00); }
   .opening.open .swing, .seg.open .swing { stroke: var(--fp-open, #ef6c00); stroke-width: 1.6; }
   .opening.window .leaf { stroke-width: 2.5; }
+  .opening.door .leaf.closed { stroke-width: 2.5; }
   .seg.open .frame { stroke: var(--fp-open, #ef6c00); fill: color-mix(in srgb, var(--fp-open, #ef6c00) 15%, var(--fp-floor-color, var(--card-background-color, #fff))); }
   .opening.unknown, .seg.unknown { opacity: .5; }
   .seg.sel .frame { stroke: var(--primary-color); stroke-width: 3; }
