@@ -41,7 +41,65 @@ WALL_SCHEMA = vol.Schema(
     extra=vol.REMOVE_EXTRA,
 )
 
-OPENING_SCHEMA = vol.Schema(
+_BINARY_SENSOR = vol.Any(None, "", vol.All(str, vol.Match(r"^binary_sensor\.[a-z0-9_]+$")))
+_LOCK = vol.Any(None, "", vol.All(str, vol.Match(r"^lock\.[a-z0-9_]+$")))
+_COVER = vol.All(str, vol.Match(r"^cover\.[a-z0-9_]+$"))
+MAX_LEAVES = 4
+
+LEAF_SCHEMA = vol.Schema(
+    {
+        # relative Breite; Anteil an der Fensterlänge = w / Summe aller w
+        vol.Required("w"): _POSITIVE,
+        # eigener Sensor dieses Flügels (optional)
+        vol.Optional("entity"): _BINARY_SENSOR,
+        vol.Optional("hinge"): vol.In(["left", "right"]),
+    },
+    extra=vol.REMOVE_EXTRA,
+)
+
+SHUTTER_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity"): _COVER,
+        vol.Required("side"): vol.In(["in", "out"]),
+        vol.Optional("color"): _COLOR,
+    },
+    extra=vol.REMOVE_EXTRA,
+)
+
+
+def _shutters(value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Höchstens ein Rollo je Seite."""
+    sides = [s["side"] for s in value]
+    if len(sides) != len(set(sides)):
+        raise vol.Invalid("Je Seite (innen/außen) ist nur ein Rollo möglich")
+    return value
+
+
+def migrate_opening(raw: Any) -> Any:
+    """Wandelt das Format bis v0.2 (sashes, shutterEntity, Schloss in entity) um."""
+    if not isinstance(raw, dict):
+        return raw
+    o = dict(raw)
+    sashes = o.pop("sashes", None)
+    if o.get("type") == "window" and "leaves" not in o and sashes in (1, 2, "1", "2"):
+        o["leaves"] = [{"w": 1} for _ in range(int(sashes))]
+        if int(sashes) == 2:
+            o["leaves"][0]["hinge"] = "left"
+            o["leaves"][1]["hinge"] = "right"
+    shutter = o.pop("shutterEntity", None)
+    shutter_color = o.pop("shutterColor", None)
+    if o.get("type") == "window" and shutter and "shutters" not in o:
+        item: dict[str, Any] = {"entity": shutter, "side": "out"}
+        if shutter_color:
+            item["color"] = shutter_color
+        o["shutters"] = [item]
+    if o.get("type") == "door" and isinstance(o.get("entity"), str) and o["entity"].startswith("lock."):
+        o.setdefault("lockEntity", o["entity"])
+        o.pop("entity")
+    return o
+
+
+_OPENING_FIELDS = vol.Schema(
     {
         vol.Required("id"): _ID,
         vol.Required("type"): vol.In(["door", "window"]),
@@ -52,19 +110,21 @@ OPENING_SCHEMA = vol.Schema(
         # Anschlag: Seite des Scharniers und Aufschlagrichtung (relativ zur Wandrichtung)
         vol.Optional("hinge", default="left"): vol.In(["left", "right"]),
         vol.Optional("swing", default="in"): vol.In(["in", "out"]),
-        # Fenster: Fensterkontakt (binary_sensor, im Editor Pflichtfeld mit Warnung);
-        # Tür: Kontakt oder Schloss
-        vol.Optional("entity"): _OPT_ENTITY,
-        # Anzahl der Fensterflügel (nur Fenster)
-        vol.Optional("sashes"): vol.All(vol.Coerce(int), vol.In([1, 2])),
+        # Fenster: Gesamtkontakt für Flügel ohne eigenen Sensor; Tür: Kontakt (binary_sensor)
+        vol.Optional("entity"): _BINARY_SENSOR,
+        # Fenster: 1 bis 4 Flügel mit eigener Breite und optionalem Sensor
+        vol.Optional("leaves"): vol.All([LEAF_SCHEMA], vol.Length(min=1, max=MAX_LEAVES)),
+        # Tür: Schloss (optional)
+        vol.Optional("lockEntity"): _LOCK,
         # Farbe, solange die Öffnung offen ist
         vol.Optional("openColor"): _COLOR,
-        # Rollo vor der Öffnung
-        vol.Optional("shutterEntity"): vol.Any(None, "", vol.All(str, vol.Match(r"^cover\.[a-z0-9_]+$"))),
-        vol.Optional("shutterColor"): _COLOR,
+        # Fenster: Rollo innen und/oder außen
+        vol.Optional("shutters"): vol.All([SHUTTER_SCHEMA], vol.Length(max=2), _shutters),
     },
     extra=vol.REMOVE_EXTRA,
 )
+
+OPENING_SCHEMA = vol.All(migrate_opening, _OPENING_FIELDS)
 
 SIDEBAR_ENTRY_SCHEMA = vol.Schema(
     {

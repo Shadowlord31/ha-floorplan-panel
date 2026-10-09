@@ -17,14 +17,20 @@ spiegelt die Typen in `frontend/src/types.ts`.
       "walls":    [{ "id": "w1", "x1": 50, "y1": 50, "x2": 950, "y2": 50, "thickness": 20 }],
       "openings": [
         { "id": "t1", "type": "door", "x": 650, "y": 650, "length": 90, "angle": 0,
-          "hinge": "left", "swing": "out", "entity": "binary_sensor.tuer" },
+          "hinge": "left", "swing": "out",
+          "entity": "binary_sensor.tuer",         // Kontakt (optional): offen/zu
+          "lockEntity": "lock.tuer" },            // Schloss (optional), getrennt vom Kontakt
         { "id": "f1", "type": "window", "x": 300, "y": 50, "length": 180, "angle": 0,
-          "entity": "binary_sensor.fenster_wz",   // Fensterkontakt – Pflichtfeld (Warnung im Editor)
-          "sashes": 2,                            // 1 oder 2 Flügel
-          "hinge": "left", "swing": "in",         // Anschlag und Öffnungsrichtung
+          "entity": "binary_sensor.fenster_wz",   // Gesamtkontakt für Flügel ohne eigenen Sensor
+          "leaves": [                             // 1 bis 4 Flügel nebeneinander
+            { "w": 1, "entity": "binary_sensor.fenster_wz_links", "hinge": "left" },
+            { "w": 2 },                           // w = relative Breite
+            { "w": 1, "hinge": "right" } ],
+          "swing": "in",                          // Öffnungsrichtung
           "openColor": "#ef6c00",                 // Farbe, solange offen
-          "shutterEntity": "cover.rollo_wz",      // Rollo (optional), liegt außen
-          "shutterColor": "#8d6e63" }
+          "shutters": [                           // Rollos (nur Fenster), je Seite eines
+            { "entity": "cover.rollo_aussen", "side": "out", "color": "#8d6e63" },
+            { "entity": "cover.raffrollo_innen", "side": "in" } ] }
       ],
       "areas": [{
         "id": "wohnzimmer", "name": "Wohnzimmer",
@@ -63,13 +69,21 @@ spiegelt die Typen in `frontend/src/types.ts`.
 | keine Raum-Übersicht | `areas[].sidebar`: Geräte/Szenen/Skripte je Raum |
 | `area.haArea` filtert den Picker | `area.haArea` liefert nur abschaltbare Vorschläge |
 
-## Fenster, Rollos, Lichtschein
+## Fenster, Rollos, Türen, Lichtschein
 
-- **Fenster** brauchen einen Fensterkontakt (`binary_sensor`). Fehlt er, warnt der Editor
-  (Chip in der Werkzeugleiste, rot markiertes Fenster), Speichern bleibt möglich.
-  Offen werden Flügel und Öffnungsbogen in `openColor` gezeichnet; `unavailable` dimmt.
-- **Rollo**: Band auf der Außenseite (gegenüber `swing`). Die Tiefe zeigt den geschlossenen
-  Anteil aus `current_position` (100 = offen), sonst aus `open`/`closed`.
+- **Fenster** haben 1 bis 4 Flügel (`leaves`). Die Breite `w` ist relativ, ein Flügel belegt
+  `w / Summe(w)` der Fensterlänge. Jeder Flügel kann einen eigenen `binary_sensor` haben, sonst
+  gilt der Gesamtkontakt `entity`. Fehlt beides überall, warnt der Editor (Chip in der
+  Werkzeugleiste, rot markiertes Fenster), Speichern bleibt möglich. Offene Flügel werden mit
+  Öffnungsbogen in `openColor` gezeichnet; `unavailable` dimmt nur den betroffenen Flügel.
+- **Rollos** gibt es nur an Fenstern: `shutters` mit je einem Eintrag für `out` (außen) und `in`
+  (innen). Die Tiefe zeigt den geschlossenen Anteil aus `current_position` (100 = offen),
+  sonst aus `open`/`closed`.
+- **Türen** zeigen offen/zu über den Kontakt `entity`; `lockEntity` ist ein eigenes Schloss und
+  erscheint als Symbol (grün verriegelt, orange offen, grau unbekannt).
+- **Migration**: `sashes: n` → n gleich breite `leaves`; `shutterEntity`/`shutterColor` →
+  `shutters[0]` (außen); `lock.*` in `entity` einer Tür → `lockEntity`. Alte Felder werden beim
+  nächsten Speichern entfernt.
 - **Lichtschein**: radialer Verlauf, Farbe aus `rgb_color` oder `glowColor`, Helligkeit skaliert
   Stärke und Reichweite. Begrenzt durch ein Sichtbarkeits-Polygon gegen die Wände. Licht fällt
   durch offene Türen und durch Türen ohne Kontakt, nicht durch Fenster.

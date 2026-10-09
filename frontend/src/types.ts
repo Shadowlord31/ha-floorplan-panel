@@ -36,20 +36,35 @@ export interface Opening {
   hinge?: "left" | "right";
   /** Aufschlagrichtung: auf die positive (`in`) oder negative (`out`) Normalenseite. */
   swing?: "in" | "out";
-  /**
-   * Fenster: Fensterkontakt (binary_sensor) – im Editor Pflichtfeld mit Warnung.
-   * Tür: Kontakt oder Schloss, optional.
-   */
+  /** Fenster: Gesamtkontakt (binary_sensor) für Flügel ohne eigenen Sensor. Tür: Kontakt. */
   entity?: string;
-  /** Anzahl der Fensterflügel (nur Fenster), Standard 1. */
-  sashes?: 1 | 2;
+  /** Fenster: 1 bis 4 Flügel nebeneinander; ohne Angabe ein Flügel. */
+  leaves?: Leaf[];
+  /** Tür: Schloss (lock), optional. */
+  lockEntity?: string;
   /** Farbe, solange die Öffnung offen ist. */
   openColor?: string;
-  /** Rollo vor der Öffnung (cover). */
-  shutterEntity?: string;
-  shutterColor?: string;
+  /** Fenster: Rollo innen und/oder außen, höchstens eines je Seite. */
+  shutters?: Shutter[];
 }
 
+/** Ein Fensterflügel. Breite relativ: Anteil = `w` / Summe aller `w` des Fensters. */
+export interface Leaf {
+  w: number;
+  /** Eigener Sensor (binary_sensor); ohne Wert gilt der Gesamtkontakt des Fensters. */
+  entity?: string;
+  hinge?: "left" | "right";
+}
+
+export type ShutterSide = "in" | "out";
+
+export interface Shutter {
+  entity: string;
+  side: ShutterSide;
+  color?: string;
+}
+
+export const MAX_LEAVES = 4;
 export const DEFAULT_OPEN_COLOR = "#ef6c00";
 export const DEFAULT_SHUTTER_COLOR = "#8d6e63";
 
@@ -135,6 +150,26 @@ export interface Plan {
 
 export const DEFAULT_SETTINGS: PlanSettings = { wallThickness: 12, grid: 10 };
 
+/** Wandelt das Format bis v0.2 (sashes, shutterEntity, Schloss in entity) um. */
+export function migrateOpening(raw: Opening): Opening {
+  const { sashes, shutterEntity, shutterColor, ...o } = raw as Opening & {
+    sashes?: number;
+    shutterEntity?: string;
+    shutterColor?: string;
+  };
+  if (o.type === "window" && !o.leaves && (sashes === 1 || sashes === 2)) {
+    o.leaves = sashes === 2 ? [{ w: 1, hinge: "left" }, { w: 1, hinge: "right" }] : [{ w: 1 }];
+  }
+  if (o.type === "window" && shutterEntity && !o.shutters) {
+    o.shutters = [{ entity: shutterEntity, side: "out", ...(shutterColor ? { color: shutterColor } : {}) }];
+  }
+  if (o.type === "door" && o.entity?.startsWith("lock.")) {
+    o.lockEntity ??= o.entity;
+    delete o.entity;
+  }
+  return o;
+}
+
 /** Ergänzt fehlende Felder, damit Frontend-Code nicht überall prüfen muss. */
 export function normalizePlan(raw: Partial<Plan> | undefined): Plan {
   const plan = raw ?? {};
@@ -146,7 +181,7 @@ export function normalizePlan(raw: Partial<Plan> | undefined): Plan {
       ...f,
       name: f.name ?? "",
       walls: f.walls ?? [],
-      openings: f.openings ?? [],
+      openings: (f.openings ?? []).map(migrateOpening),
       areas: (f.areas ?? []).map((a) => ({ ...a, name: a.name ?? "", sidebar: a.sidebar ?? [] })),
       items: f.items ?? [],
     })),

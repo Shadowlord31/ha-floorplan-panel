@@ -21,7 +21,8 @@ import {
 import { domainOf, entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
 import { glowEnabled, glowReach, openingPassesLight, wallsLightPassesThrough } from "./light";
 import { maxWallThickness, planSvgStyles, renderArea, renderOpening, renderWalls, wallThickness } from "./render";
-import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, type Area, type Floor, type FloorItem, type Opening, type Plan, type Point, type Wall } from "./types";
+import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, type Area, type Floor, type FloorItem, type Leaf, type Opening, type Plan, type Point, type Shutter, type ShutterSide, type Wall, MAX_LEAVES } from "./types";
+import { leafSegments, setLeafCount, setLeafWidth, windowLeaves, windowMissingSensor } from "./openings";
 
 const DOMAIN = "floorplan_panel";
 const UNDO_LIMIT = 100;
@@ -113,6 +114,7 @@ export class FpEditor extends LitElement {
   @state() private _floorId!: string;
   @state() private _tool: Tool = "select";
   @state() private _sel?: Selection;
+  @state() private _leafSel?: number;
   @state() private _view: View = { x: 0, y: 0, w: 1000, h: 700 };
   @state() private _cursor?: Point;
   @state() private _chainStart?: Point;
@@ -241,7 +243,7 @@ export class FpEditor extends LitElement {
   /** Fenster ohne Fensterkontakt auf allen Etagen (Pflichtfeld, nur Warnung). */
   private get _windowsWithoutContact(): { floorId: string; opening: Opening }[] {
     return this._draft.floors.flatMap((f) =>
-      f.openings.filter((o) => o.type === "window" && !o.entity).map((opening) => ({ floorId: f.id, opening }))
+      f.openings.filter(windowMissingSensor).map((opening) => ({ floorId: f.id, opening }))
     );
   }
 
@@ -744,7 +746,7 @@ export class FpEditor extends LitElement {
       </g>
       <g class="openings">
         ${floor.openings.map(
-          (o) => svg`<g data-kind="opening" data-id=${o.id}>${renderOpening(o, cut, { selected: sel?.kind === "opening" && sel.id === o.id, forceOpen: sel?.kind === "opening" && sel.id === o.id, warn: o.type === "window" && !o.entity })}</g>`
+          (o) => svg`<g data-kind="opening" data-id=${o.id}>${renderOpening(o, cut, { selected: sel?.kind === "opening" && sel.id === o.id, forceOpen: sel?.kind === "opening" && sel.id === o.id, warn: windowMissingSensor(o), leafIndex: sel?.kind === "opening" && sel.id === o.id ? (this._leafSel ?? undefined) : undefined })}</g>`
         )}
       </g>
       <g class="items">${floor.items.map((it) => this._renderItem(it, upp))}</g>
@@ -933,21 +935,11 @@ export class FpEditor extends LitElement {
 
   private _renderOpeningProps(o: Opening) {
     const isWindow = o.type === "window";
-    const missing = isWindow && !o.entity;
+    const missing = windowMissingSensor(o);
+    const leaves = windowLeaves(o);
+    const segs = leafSegments(o);
+    const shutterOf = (side: ShutterSide) => o.shutters?.find((s) => s.side === side);
     return html`
-      ${isWindow
-        ? html`<div class="field ${missing ? "required-missing" : ""}">
-            <span>Fensterkontakt (Pflicht)</span>
-            <fp-entity-picker
-              .hass=${this.hass}
-              .value=${o.entity ?? ""}
-              .domains=${["binary_sensor"]}
-              placeholder="Fensterkontakt wählen …"
-              @value-changed=${(ev: CustomEvent<{ value: string }>) => this._setProp("entity", ev.detail.value)}
-            ></fp-entity-picker>
-            ${missing ? html`<span class="warn">Ohne Kontakt kann der Öffnungszustand nicht angezeigt werden.</span>` : nothing}
-          </div>`
-        : nothing}
       <label class="field">
         <span>Art</span>
         <select @change=${(ev: Event) => this._setProp("type", (ev.target as HTMLSelectElement).value)}>
@@ -959,33 +951,145 @@ export class FpEditor extends LitElement {
         ${this._num("Breite", "length", o.length, { min: 10, max: 1000 })} ${this._num("Winkel", "angle", o.angle, { min: -360, max: 360, step: 15 })}
       </div>
       ${isWindow
-        ? html`<label class="field">
-            <span>Flügel</span>
-            <select @change=${(ev: Event) => this._setProp("sashes", Number((ev.target as HTMLSelectElement).value))}>
-              <option value="1" ?selected=${o.sashes !== 2}>Einflügelig</option>
-              <option value="2" ?selected=${o.sashes === 2}>Zweiflügelig</option>
-            </select>
-          </label>`
-        : nothing}
-      <div class="btn-row">
-        ${!isWindow || o.sashes !== 2
-          ? html`<button @click=${() => this._setProp("hinge", o.hinge === "right" ? "left" : "right")}>
-              <ha-icon icon="mdi:swap-horizontal"></ha-icon> Anschlag
-            </button>`
-          : nothing}
-        <button @click=${() => this._setProp("swing", o.swing === "out" ? "in" : "out")}>
-          <ha-icon icon="mdi:swap-vertical"></ha-icon> Richtung
-        </button>
-      </div>
-      ${isWindow ? nothing : this._entity("Kontakt / Schloss (optional)", "entity", o.entity, ["binary_sensor", "lock"])}
+        ? html`
+            <div class="field ${missing ? "required-missing" : ""}">
+              <span>Gesamtkontakt (für Flügel ohne eigenen Sensor)</span>
+              <fp-entity-picker
+                .hass=${this.hass}
+                .value=${o.entity ?? ""}
+                .domains=${["binary_sensor"]}
+                placeholder="Fensterkontakt wählen …"
+                @value-changed=${(ev: CustomEvent<{ value: string }>) => this._setProp("entity", ev.detail.value)}
+              ></fp-entity-picker>
+              ${missing ? html`<span class="warn">Ohne Sensor kann der Öffnungszustand nicht angezeigt werden.</span>` : nothing}
+            </div>
+            <h4>Flügel (${leaves.length} von ${MAX_LEAVES})</h4>
+            ${leaves.map(
+              (leaf, i) => html`<div class="leaf-row ${this._leafSel === i ? "active" : ""}" @click=${() => (this._leafSel = i)}>
+                <div class="leaf-head">
+                  <b>${i + 1}</b>
+                  <label>
+                    Breite
+                    <input
+                      type="number"
+                      min="10"
+                      step="1"
+                      .value=${String(Math.round(segs[i].x1 - segs[i].x0))}
+                      ?disabled=${leaves.length === 1}
+                      @change=${(ev: Event) => this._setLeafWidth(i, Number((ev.target as HTMLInputElement).value))}
+                    />
+                  </label>
+                  <button
+                    title="Anschlag wechseln"
+                    @click=${() => this._setLeaf(i, { hinge: segs[i].hinge === "right" ? "left" : "right" })}
+                  >
+                    <ha-icon icon="mdi:swap-horizontal"></ha-icon> ${segs[i].hinge === "right" ? "rechts" : "links"}
+                  </button>
+                </div>
+                <fp-entity-picker
+                  .hass=${this.hass}
+                  .value=${leaf.entity ?? ""}
+                  .domains=${["binary_sensor"]}
+                  placeholder="Eigener Sensor (optional)"
+                  @value-changed=${(ev: CustomEvent<{ value: string }>) => this._setLeaf(i, { entity: ev.detail.value || undefined })}
+                ></fp-entity-picker>
+              </div>`
+            )}
+            <div class="btn-row">
+              <button ?disabled=${leaves.length >= MAX_LEAVES} @click=${() => this._setLeafCount(leaves.length + 1)}>
+                <ha-icon icon="mdi:plus"></ha-icon> Flügel
+              </button>
+              <button ?disabled=${leaves.length <= 1} @click=${() => this._setLeafCount(leaves.length - 1)}>
+                <ha-icon icon="mdi:minus"></ha-icon> Flügel
+              </button>
+              <button @click=${() => this._setProp("swing", o.swing === "out" ? "in" : "out")}>
+                <ha-icon icon="mdi:swap-vertical"></ha-icon> Richtung
+              </button>
+            </div>`
+        : html`
+            <div class="btn-row">
+              <button @click=${() => this._setProp("hinge", o.hinge === "right" ? "left" : "right")}>
+                <ha-icon icon="mdi:swap-horizontal"></ha-icon> Anschlag
+              </button>
+              <button @click=${() => this._setProp("swing", o.swing === "out" ? "in" : "out")}>
+                <ha-icon icon="mdi:swap-vertical"></ha-icon> Richtung
+              </button>
+            </div>
+            ${this._entity("Kontakt (optional)", "entity", o.entity, ["binary_sensor"])}
+            ${this._entity("Schloss (optional)", "lockEntity", o.lockEntity, ["lock"])}
+            <p class="muted">Ohne Kontakt gilt die Tür beim Lichtschein als offen.</p>`}
       ${this._color("Farbe wenn offen", "openColor", o.openColor, DEFAULT_OPEN_COLOR)}
       <p class="muted">Im Editor wird die ausgewählte Öffnung geöffnet gezeigt. Ziehen schiebt sie entlang der Wände.</p>
-
-      <h4>Rollo</h4>
-      ${this._entity("Rollo (optional)", "shutterEntity", o.shutterEntity, ["cover"])}
-      ${o.shutterEntity ? this._color("Rollo-Farbe", "shutterColor", o.shutterColor, DEFAULT_SHUTTER_COLOR) : nothing}
-      <p class="muted">Das Rollo liegt auf der Außenseite (gegenüber der Öffnungsrichtung); die Tiefe zeigt, wie weit es geschlossen ist.</p>
+      ${isWindow
+        ? html`<h4>Rollo</h4>
+            ${(["out", "in"] as const).map((side) => {
+              const sh = shutterOf(side);
+              return html`<div class="shutter-row">
+                <div class="field">
+                  <span>${side === "out" ? "Außen" : "Innen"} (optional)</span>
+                  <fp-entity-picker
+                    .hass=${this.hass}
+                    .value=${sh?.entity ?? ""}
+                    .domains=${["cover"]}
+                    @value-changed=${(ev: CustomEvent<{ value: string }>) => this._setShutter(side, { entity: ev.detail.value })}
+                  ></fp-entity-picker>
+                </div>
+                ${sh
+                  ? html`<label class="field color">
+                      <span>Farbe</span>
+                      <input
+                        type="color"
+                        .value=${sh.color && sh.color.startsWith("#") ? sh.color : DEFAULT_SHUTTER_COLOR}
+                        @change=${(ev: Event) => this._setShutter(side, { color: (ev.target as HTMLInputElement).value })}
+                      />
+                    </label>`
+                  : nothing}
+              </div>`;
+            })}
+            <p class="muted">Außen liegt auf der Seite gegen den Aufschlag „innen“; die Tiefe des Bands zeigt, wie weit das Rollo zu ist.</p>`
+        : nothing}
     `;
+  }
+
+  /** Ändert die Flügelliste des ausgewählten Fensters. */
+  private _editLeaves(fn: (leaves: Leaf[], o: Opening) => Leaf[]): void {
+    this._mutate(() => {
+      const o = this._findSelected() as Opening | undefined;
+      if (o) o.leaves = fn(windowLeaves(o).map((l) => ({ ...l })), o);
+    });
+  }
+
+  private _setLeaf(index: number, patch: Partial<Leaf>): void {
+    this._leafSel = index;
+    this._editLeaves((leaves, o) => {
+      // feste Anschläge speichern wir erst, wenn der Nutzer sie ändert
+      if (patch.hinge === undefined) return leaves.map((l, i) => (i === index ? cleanLeaf({ ...l, ...patch }) : l));
+      const segs = leafSegments(o);
+      return leaves.map((l, i) => (i === index ? cleanLeaf({ ...l, ...patch }) : { ...l, hinge: l.hinge ?? segs[i].hinge }));
+    });
+  }
+
+  private _setLeafCount(count: number): void {
+    this._editLeaves((leaves) => setLeafCount(leaves, count));
+    this._leafSel = Math.min(this._leafSel ?? 0, count - 1);
+  }
+
+  private _setLeafWidth(index: number, width: number): void {
+    if (!Number.isFinite(width)) return;
+    this._editLeaves((leaves, o) => setLeafWidth(leaves, index, width, o.length));
+  }
+
+  private _setShutter(side: ShutterSide, patch: Partial<Shutter>): void {
+    this._mutate(() => {
+      const o = this._findSelected() as Opening | undefined;
+      if (!o) return;
+      const list = (o.shutters ?? []).filter((s) => s.side !== side);
+      const current = o.shutters?.find((s) => s.side === side);
+      const next = { ...(current ?? { entity: "", side }), ...patch };
+      if (next.entity) list.push(next);
+      if (list.length) o.shutters = list;
+      else delete o.shutters;
+    });
   }
 
   private _renderAreaProps(a: Area) {
@@ -1695,6 +1799,37 @@ export class FpEditor extends LitElement {
         padding: 4px 0;
         text-align: left;
       }
+      .leaf-row {
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 6px 8px;
+        margin-bottom: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .leaf-row.active {
+        border-color: var(--primary-color);
+      }
+      .leaf-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .leaf-head label {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+      }
+      .leaf-head input {
+        width: 70px;
+      }
+      .shutter-row {
+        margin-bottom: 4px;
+      }
       .btn-row {
         display: flex;
         gap: 8px;
@@ -1852,6 +1987,13 @@ export class FpEditor extends LitElement {
       }
     `,
   ];
+}
+
+function cleanLeaf(l: Leaf): Leaf {
+  const out: Leaf = { w: l.w };
+  if (l.entity) out.entity = l.entity;
+  if (l.hinge) out.hinge = l.hinge;
+  return out;
 }
 
 function round(v: number): number {

@@ -83,7 +83,9 @@
           "length": 90,
           "angle": 0,
           "hinge": "left",
-          "swing": "out"
+          "swing": "out",
+          "entity": "binary_sensor.wohnungstuer",
+          "lockEntity": "lock.wohnungstuer"
         },
         {
           "id": "t-wohnen",
@@ -132,9 +134,29 @@
           "y": 50,
           "length": 180,
           "angle": 0,
-          "entity": "binary_sensor.fenster_wohnzimmer",
-          "sashes": 2,
-          "shutterEntity": "cover.wohnzimmer_rollo"
+          "leaves": [
+            {
+              "w": 2,
+              "entity": "binary_sensor.fenster_wohnzimmer_links",
+              "hinge": "left"
+            },
+            {
+              "w": 3,
+              "entity": "binary_sensor.fenster_wohnzimmer_mitte",
+              "hinge": "left"
+            },
+            {
+              "w": 2,
+              "entity": "binary_sensor.fenster_wohnzimmer_rechts",
+              "hinge": "right"
+            }
+          ],
+          "shutters": [
+            {
+              "entity": "cover.wohnzimmer_rollo",
+              "side": "out"
+            }
+          ]
         },
         {
           "id": "f-kueche",
@@ -153,9 +175,28 @@
           "length": 150,
           "angle": 0,
           "entity": "binary_sensor.fenster_schlafzimmer",
-          "hinge": "right",
-          "shutterEntity": "cover.schlafzimmer_rollo",
-          "swing": "out"
+          "swing": "out",
+          "leaves": [
+            {
+              "w": 1,
+              "hinge": "left"
+            },
+            {
+              "w": 1,
+              "hinge": "right"
+            }
+          ],
+          "shutters": [
+            {
+              "entity": "cover.schlafzimmer_rollo",
+              "side": "out"
+            },
+            {
+              "entity": "cover.schlafzimmer_raffrollo",
+              "side": "in",
+              "color": "#b0a090"
+            }
+          ]
         },
         {
           "id": "f-bad",

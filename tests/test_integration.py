@@ -158,7 +158,12 @@ async def test_show_room_service_reaches_subscribers(hass: HomeAssistant, hass_w
     assert msg["event"] == {"type": "show_room", "room": "Küche", "floor": None}
 
 
-def test_schema_window_shutter_and_glow_fields() -> None:
+def _plan_with(opening: dict) -> dict:
+    base = {"id": "o", "type": "window", "x": 0, "y": 0, "length": 100}
+    return {"floors": [{"id": "eg", "openings": [{**base, **opening}]}]}
+
+
+def test_schema_window_leaves_shutters_and_glow_fields() -> None:
     plan = validate_plan(
         {
             "floors": [
@@ -172,36 +177,90 @@ def test_schema_window_shutter_and_glow_fields() -> None:
                             "y": 0,
                             "length": 100,
                             "entity": "binary_sensor.fenster",
-                            "sashes": 2,
+                            "leaves": [
+                                {"w": 1, "entity": "binary_sensor.links", "hinge": "left"},
+                                {"w": 2},
+                                {"w": 1, "hinge": "right"},
+                                {"w": 1},
+                            ],
                             "openColor": "#ff0000",
-                            "shutterEntity": "cover.rollo",
-                            "shutterColor": "#8d6e63",
+                            "shutters": [
+                                {"entity": "cover.aussen", "side": "out", "color": "#8d6e63"},
+                                {"entity": "cover.innen", "side": "in"},
+                            ],
                         },
                         # Fenster ohne Kontakt bleibt gültig (nur Warnung im Editor)
                         {"id": "f2", "type": "window", "x": 0, "y": 0, "length": 100},
+                        {
+                            "id": "t",
+                            "type": "door",
+                            "x": 0,
+                            "y": 0,
+                            "length": 90,
+                            "entity": "binary_sensor.tuer",
+                            "lockEntity": "lock.tuer",
+                        },
                     ],
                     "items": [{"id": "l", "x": 1, "y": 1, "entity": "light.a", "glow": True, "glowRadius": 200, "glowColor": "#ffd9a0"}],
                 }
             ]
         }
     )
-    window = plan["floors"][0]["openings"][0]
-    assert window["sashes"] == 2
-    assert window["shutterEntity"] == "cover.rollo"
+    window, _, door = plan["floors"][0]["openings"]
+    assert len(window["leaves"]) == 4
+    assert window["leaves"][0]["entity"] == "binary_sensor.links"
+    assert [s["side"] for s in window["shutters"]] == ["out", "in"]
+    assert door["lockEntity"] == "lock.tuer"
     assert plan["floors"][0]["items"][0]["glowRadius"] == 200
+
+
+def test_schema_migrates_old_window_and_door_format() -> None:
+    plan = validate_plan(
+        {
+            "floors": [
+                {
+                    "id": "eg",
+                    "openings": [
+                        {
+                            "id": "f",
+                            "type": "window",
+                            "x": 0,
+                            "y": 0,
+                            "length": 100,
+                            "sashes": 2,
+                            "shutterEntity": "cover.rollo",
+                            "shutterColor": "#111111",
+                        },
+                        {"id": "t", "type": "door", "x": 0, "y": 0, "length": 90, "entity": "lock.tuer"},
+                    ],
+                }
+            ]
+        }
+    )
+    window, door = plan["floors"][0]["openings"]
+    assert [leaf["w"] for leaf in window["leaves"]] == [1, 1]
+    assert [leaf["hinge"] for leaf in window["leaves"]] == ["left", "right"]
+    assert window["shutters"] == [{"entity": "cover.rollo", "side": "out", "color": "#111111"}]
+    assert "sashes" not in window and "shutterEntity" not in window
+    assert door["lockEntity"] == "lock.tuer"
+    assert "entity" not in door
 
 
 @pytest.mark.parametrize(
     "opening",
     [
-        {"sashes": 3},
-        {"shutterEntity": "light.kein_rollo"},
-        {"shutterEntity": "cover rollo"},
+        {"leaves": [{"w": 1}] * 5},
+        {"leaves": []},
+        {"leaves": [{"w": 0}]},
+        {"leaves": [{"w": 1, "entity": "light.kein_sensor"}]},
+        {"entity": "light.kein_sensor"},
+        {"lockEntity": "switch.kein_schloss"},
+        {"shutters": [{"entity": "light.kein_rollo", "side": "out"}]},
+        {"shutters": [{"entity": "cover.a", "side": "left"}]},
+        {"shutters": [{"entity": "cover.a", "side": "in"}, {"entity": "cover.b", "side": "in"}]},
         {"openColor": "red;background:url(x)"},
     ],
 )
-def test_schema_rejects_bad_window_fields(opening: dict) -> None:
+def test_schema_rejects_bad_opening_fields(opening: dict) -> None:
     with pytest.raises(vol.Invalid):
-        validate_plan(
-            {"floors": [{"id": "eg", "openings": [{"id": "f", "type": "window", "x": 0, "y": 0, "length": 100, **opening}]}]}
-        )
+        validate_plan(_plan_with(opening))
