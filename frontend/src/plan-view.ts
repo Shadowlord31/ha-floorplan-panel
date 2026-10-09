@@ -142,7 +142,7 @@ export class FpPlanView extends LitElement {
       : IDENTITY_ZOOM;
     if (zoomed && this.popupOpen && zoom.scale > 1) zoom = this._shiftForPopup(zoom);
     const inv = zoom.scale > 1 ? ZOOMED_ITEM_SCALE / zoom.scale : 1;
-    const labelSize = Math.max(width, height) / 45;
+    const labelSize = Math.max(this.plan.canvas.width, this.plan.canvas.height) / 45;
     return html`
       <div
         class="plan"

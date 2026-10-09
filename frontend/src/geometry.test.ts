@@ -118,8 +118,9 @@ describe("contentBounds", () => {
       canvas: { width: 1000, height: 800 },
       floors: [{ id: "eg", name: "", walls: [], areas: [], items: [], openings: [] }],
     } as never);
+  const wall = { id: "w", x1: 100, y1: 100, x2: 500, y2: 100, thickness: 20 };
 
-  it("entspricht bei leerem Plan der Leinwand plus Rand", () => {
+  it("zeigt bei leerer Etage die Leinwand plus Rand", () => {
     const plan = base();
     const b = contentBounds(plan.floors[0], plan);
     expect(b.x).toBeCloseTo(-30);
@@ -127,18 +128,29 @@ describe("contentBounds", () => {
     expect(b.h).toBeCloseTo(860);
   });
 
-  it("wächst, wenn ein Türschwung über den unteren Rand ragt", () => {
+  it("richtet sich nach dem Inhalt, nicht nach der Leinwand, auch außerhalb davon", () => {
     const plan = base();
-    plan.floors[0].openings.push({ id: "t", type: "door", x: 500, y: 790, length: 90, angle: 0, swing: "in" });
+    plan.floors[0].walls.push({ ...wall, x1: -300, x2: 1500 });
     const b = contentBounds(plan.floors[0], plan);
-    expect(b.y + b.h).toBeGreaterThan(790 + 90 + 30);
+    expect(b.x).toBeLessThan(-300);
+    expect(b.x + b.w).toBeGreaterThan(1500);
+    expect(b.h).toBeLessThan(200);
   });
 
-  it("beachtet die Drehung und die Schwungseite", () => {
+  it("wächst, wenn ein Türschwung über die Wand ragt", () => {
+    const plan = base();
+    plan.floors[0].walls.push(wall);
+    plan.floors[0].openings.push({ id: "t", type: "door", x: 300, y: 100, length: 90, angle: 0, swing: "in" });
+    const b = contentBounds(plan.floors[0], plan);
+    expect(b.y + b.h).toBeGreaterThan(100 + 90 + 30);
+  });
+
+  it("beachtet Drehung und Schwungseite", () => {
     const plan = base();
     plan.floors[0].openings.push({ id: "t", type: "door", x: 10, y: 400, length: 100, angle: 90, swing: "out" });
     const b = contentBounds(plan.floors[0], plan);
-    // angle 90: Normale zeigt nach -x, "out" schwingt nach +x; links ragt nur der Rollo-Rand (30) über
-    expect(b.x).toBeCloseTo(-50, 0);
+    // angle 90: Normale zeigt nach -x, "out" schwingt nach +x; links ragt nur der Rollo-Rand (30) über x=10
+    expect(b.x).toBeGreaterThan(-60);
+    expect(b.x + b.w).toBeGreaterThan(10 + 100);
   });
 });

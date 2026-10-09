@@ -10,6 +10,7 @@ import { LitElement, css, html, nothing, svg, unsafeCSS, type PropertyValues, ty
 import { property, query, state } from "lit/decorators.js";
 import "./entity-picker";
 import {
+  contentBounds,
   distance,
   nearestWall,
   orthoSnap,
@@ -182,9 +183,10 @@ export class FpEditor extends LitElement {
   }
 
   private _fitView(): void {
-    const { width, height } = this._draft.canvas;
-    const pad = Math.max(width, height) * 0.04;
-    this._view = { x: -pad, y: -pad, w: width + 2 * pad, h: height + 2 * pad };
+    const b = contentBounds(this._floor, this._draft);
+    // Etwas Luft, damit nach außen weitergezeichnet werden kann
+    const pad = Math.max(b.w, b.h) * 0.1;
+    this._view = { x: b.x - pad, y: b.y - pad, w: b.w + 2 * pad, h: b.h + 2 * pad };
   }
 
   // ---------------------------------------------------------------- Änderungen & Undo
@@ -546,7 +548,7 @@ export class FpEditor extends LitElement {
     const p = this._toPlan(ev);
     const f = Math.exp(ev.deltaY * 0.0015);
     const { width, height } = this._draft.canvas;
-    const maxW = Math.max(width, height) * 4;
+    const maxW = Math.max(width, height) * 8;
     const w = Math.min(maxW, Math.max(50, this._view.w * f));
     const k = w / this._view.w;
     this._view = {
@@ -717,6 +719,9 @@ export class FpEditor extends LitElement {
     const majorGrid = grid * 10;
     const cut = maxWallThickness(floor, plan) + 2;
     const sel = this._sel;
+    // Zeichenfläche ohne Rand: Hintergrund und Raster decken immer den ganzen sichtbaren Bereich ab
+    const v = this._view;
+    const [gx, gy, gw, gh] = [v.x - v.w, v.y - v.h, v.w * 3, v.h * 3];
     return svg`
       <defs>
         <pattern id="grid-minor" width=${grid} height=${grid} patternUnits="userSpaceOnUse">
@@ -727,8 +732,8 @@ export class FpEditor extends LitElement {
           <path d="M ${majorGrid} 0 L 0 0 0 ${majorGrid}" class="grid-major"></path>
         </pattern>
       </defs>
-      <rect class="sheet" x="0" y="0" width=${width} height=${height}></rect>
-      ${grid * (1 / upp) >= 4 ? svg`<rect x="0" y="0" width=${width} height=${height} fill="url(#grid-major)" pointer-events="none"></rect>` : nothing}
+      <rect class="sheet" x=${gx} y=${gy} width=${gw} height=${gh}></rect>
+      ${grid * (1 / upp) >= 4 ? svg`<rect x=${gx} y=${gy} width=${gw} height=${gh} fill="url(#grid-major)" pointer-events="none"></rect>` : nothing}
       <g class="areas">
         ${floor.areas.map(
           (a) => svg`<g data-kind="area" data-id=${a.id}>${renderArea(a, {
@@ -1303,12 +1308,10 @@ export class FpEditor extends LitElement {
         <input type="text" .value=${floor.name} @change=${(ev: Event) => this._mutate((f) => (f.name = (ev.target as HTMLInputElement).value.trim()))} />
       </label>
       <div class="grid2">
-        ${this._planNum("Breite", plan.canvas.width, (v) => (plan.canvas.width = v), 50)}
-        ${this._planNum("Höhe", plan.canvas.height, (v) => (plan.canvas.height = v), 50)}
         ${this._planNum("Wandstärke", plan.settings.wallThickness, (v) => (plan.settings.wallThickness = v), 1)}
         ${this._planNum("Raster", plan.settings.grid, (v) => (plan.settings.grid = v), 1)}
       </div>
-      <p class="muted">Einheiten frei wählbar – Zentimeter bieten sich an (1000 × 700 = 10 × 7 m).</p>
+      <p class="muted">Die Zeichenfläche ist unbegrenzt. Einheiten frei wählbar – Zentimeter bieten sich an (1000 = 10 m).</p>
       <p class="muted">
         ${floor.walls.length} Wände · ${floor.openings.length} Türen/Fenster · ${floor.areas.length} Räume · ${floor.items.length} Icons
       </p>

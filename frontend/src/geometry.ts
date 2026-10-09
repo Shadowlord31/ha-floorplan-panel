@@ -194,15 +194,15 @@ export interface Rect {
 }
 
 /**
- * Sichtbereich einer Etage: mindestens die Leinwand, erweitert um alles, was darüber
- * hinausragt (Wandstärke, Türschwung, Rollos, Icons), plus ein kleiner Rand.
+ * Sichtbereich einer Etage: alles, was gezeichnet ist (Wandstärke, Türschwung, Rollos, Icons)
+ * plus ein kleiner Rand. Eine leere Etage zeigt die Leinwand.
  */
 export function contentBounds(floor: Floor, plan: Plan): Rect {
   const { width, height } = plan.canvas;
-  let minX = 0;
-  let minY = 0;
-  let maxX = width;
-  let maxY = height;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
   const add = (x: number, y: number, m = 0) => {
     minX = Math.min(minX, x - m);
     minY = Math.min(minY, y - m);
@@ -231,6 +231,10 @@ export function contentBounds(floor: Floor, plan: Plan): Rect {
   }
   const itemMargin = long * 0.04;
   for (const it of floor.items) add(it.x, it.y, itemMargin);
-  const pad = long * 0.03;
+  if (minX === Infinity) {
+    const pad = long * 0.03;
+    return { x: -pad, y: -pad, w: width + 2 * pad, h: height + 2 * pad };
+  }
+  const pad = Math.max(maxX - minX, maxY - minY) * 0.03;
   return { x: minX - pad, y: minY - pad, w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
 }
