@@ -79,7 +79,7 @@ spiegelt die Typen in `frontend/src/types.ts`.
 - **Rollos** gibt es nur an Fenstern: `shutters` mit je einem Eintrag für `out` (außen) und `in`
   (innen). Die Tiefe zeigt den geschlossenen Anteil aus `current_position` (100 = offen),
   sonst aus `open`/`closed`.
-- **Türen** zeigen offen/zu über den Kontakt `entity`; `lockEntity` ist ein eigenes Schloss und
+- **Türen** zeigen offen/zu über den Kontakt `entity` (ohne Kontakt immer offen gezeichnet); `lockEntity` ist ein eigenes Schloss und
   erscheint als Symbol (grün verriegelt, orange offen, grau unbekannt).
 - **Migration**: `sashes: n` → n gleich breite `leaves`; `shutterEntity`/`shutterColor` →
   `shutters[0]` (außen); `lock.*` in `entity` einer Tür → `lockEntity`. Alte Felder werden beim

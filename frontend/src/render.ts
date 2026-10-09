@@ -176,7 +176,7 @@ export function renderOpening(
   }
   // Tür: zu = Blatt in der Wandebene; offen = Blatt im rechten Winkel plus Viertelkreis
   const st = doorState(o, opts.hass);
-  const open = !!opts.forceOpen || st.open;
+  const open = !!opts.forceOpen || !o.entity || st.open;
   const cls = `opening door ${open ? "open" : ""} ${st.unknown ? "unknown" : ""} ${opts.selected ? "selected" : ""}`;
   return svg`
     <g class=${cls} data-id=${o.id} transform="translate(${o.x} ${o.y}) rotate(${o.angle})" style=${style}>
