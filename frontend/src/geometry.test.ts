@@ -192,3 +192,18 @@ describe("Ausrichtung und Platzierung", () => {
     expect(Math.min(a[1].x, 400 - a[1].x, a[1].y, 300 - a[1].y)).toBeLessThan(60);
   });
 });
+
+import { snapToWallLine, uncoveredParts } from "./geometry";
+
+describe("Andocken", () => {
+  const walls: Wall[] = [{ id: "w", x1: 0, y1: 0, x2: 100, y2: 0 }];
+  it("fängt mitten auf der Wand", () => {
+    expect(snapToWallLine({ x: 40, y: 6 }, walls, 10)).toEqual({ x: 40, y: 0 });
+    expect(snapToWallLine({ x: 40, y: 30 }, walls, 10)).toBeUndefined();
+  });
+  it("liefert nur nicht abgedeckte Teile", () => {
+    expect(uncoveredParts({ x: 0, y: 0 }, { x: 100, y: 0 }, walls)).toEqual([]);
+    expect(uncoveredParts({ x: 0, y: 0 }, { x: 200, y: 0 }, walls)).toEqual([[{ x: 100, y: 0 }, { x: 200, y: 0 }]]);
+    expect(uncoveredParts({ x: 0, y: 10 }, { x: 100, y: 10 }, walls)).toHaveLength(1);
+  });
+});

@@ -367,3 +367,46 @@ export function autoPlace(
   }
   return out;
 }
+
+/** Fängt `p` auf den nächsten Punkt einer vorhandenen Wand (auch mitten auf der Wand). */
+export function snapToWallLine(p: Point, walls: readonly Wall[], maxDist: number, ignore: readonly Wall[] = []): Point | undefined {
+  let best: Point | undefined;
+  let bestD = maxDist;
+  for (const w of walls) {
+    if (ignore.includes(w)) continue;
+    const hit = projectOnSegment(p, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+    const d = distance(p, hit.point);
+    if (d <= bestD) {
+      best = hit.point;
+      bestD = d;
+    }
+  }
+  return best && { x: Math.round(best.x * 100) / 100, y: Math.round(best.y * 100) / 100 };
+}
+
+/** Teilstücke der Strecke a–b, die noch von keiner kollinearen Wand abgedeckt sind. */
+export function uncoveredParts(a: Point, b: Point, walls: readonly Wall[], tol = 0.5): [Point, Point][] {
+  const len = distance(a, b);
+  if (len < 1) return [];
+  const spans: [number, number][] = [];
+  for (const w of walls) {
+    const p1 = { x: w.x1, y: w.y1 };
+    const p2 = { x: w.x2, y: w.y2 };
+    const r1 = projectOnSegment(p1, a, b);
+    const r2 = projectOnSegment(p2, a, b);
+    if (distance(p1, r1.point) > tol || distance(p2, r2.point) > tol) continue;
+    const t1 = Math.min(r1.t, r2.t);
+    const t2 = Math.max(r1.t, r2.t);
+    if (t2 > t1) spans.push([t1, t2]);
+  }
+  spans.sort((x, y) => x[0] - y[0]);
+  const out: [Point, Point][] = [];
+  let cur = 0;
+  const at = (t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  for (const [s, e] of spans) {
+    if (s > cur && (s - cur) * len > 1) out.push([at(cur), at(s)]);
+    cur = Math.max(cur, e);
+  }
+  if (cur < 1 && (1 - cur) * len > 1) out.push([at(cur), at(1)]);
+  return out;
+}

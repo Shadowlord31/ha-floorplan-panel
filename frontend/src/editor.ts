@@ -23,6 +23,8 @@ import {
   snapToAreaCorner,
   snapToEndpoint,
   snapToGrid,
+  snapToWallLine,
+  uncoveredParts,
   type Guide,
   type Rect,
 } from "./geometry";
@@ -41,7 +43,7 @@ const samePoint = (x: number, y: number, p: Point) => Math.abs(x - p.x) < 0.5 &&
 const ITEM_RADIUS_PX = 14;
 const HANDLE_RADIUS_PX = 7;
 
-type Tool = "select" | "marquee" | "wall" | "area" | "rect" | "door" | "window" | "item";
+type Tool = "select" | "marquee" | "wall" | "area" | "rect" | "wallrect" | "door" | "window" | "item";
 type Kind = "wall" | "opening" | "area" | "item";
 interface Selection {
   kind: Kind;
@@ -99,6 +101,7 @@ const TOOLS: { id: Tool; icon: string; label: string; hint: string }[] = [
   { id: "select", icon: "mdi:cursor-default-outline", label: "Auswahl", hint: "Element anklicken zum Bearbeiten, ziehen zum Verschieben. Leere Fläche ziehen verschiebt die Ansicht, Mausrad zoomt. Umschalt-/Strg-Klick wählt mehrere, Rechtsklick oder langes Drücken öffnet das Menü." },
   { id: "marquee", icon: "mdi:select-drag", label: "Mehrfachauswahl", hint: "Rahmen aufziehen, um mehrere Elemente zu wählen (Umschalt: zur Auswahl hinzufügen). Danach ziehen, duplizieren, kopieren oder als Vorlage speichern." },
   { id: "wall", icon: "mdi:wall", label: "Wand", hint: "Klick setzt Anfang, weitere Klicks setzen Wandstücke. Esc oder Doppelklick beendet. Umschalt: freier Winkel, Alt: ohne Raster." },
+  { id: "wallrect", icon: "mdi:square-outline", label: "Wände (Rechteck)", hint: "Von Ecke zu Ecke ziehen: legt nur die vier Wände an, ohne Raumfläche. Bestehende Wände werden mitgenutzt, nicht doppelt gezeichnet. Alt: ohne Fang, Esc bricht ab." },
   { id: "area", icon: "mdi:vector-polygon", label: "Raum", hint: "Ecken nacheinander anklicken, zum Schließen den ersten Punkt anklicken oder Enter drücken. Esc bricht ab." },
   { id: "rect", icon: "mdi:vector-rectangle", label: "Raum (Rechteck)", hint: "Von Ecke zu Ecke ziehen: legt Raumfläche und die vier Wände in einem Zug an. Alt: ohne Raster/Fang, Esc bricht ab." },
   { id: "door", icon: "mdi:door", label: "Tür", hint: "Auf eine Wand klicken, um dort eine Tür einzusetzen." },
@@ -603,6 +606,10 @@ export class FpEditor extends LitElement {
     if (ep) return { ...ep };
     const corner = snapToAreaCorner(p, this._floor.areas, SNAP_PX * this._upp, ignorePts);
     if (corner) return corner;
+    if (this._tool !== "item") {
+      const onWall = snapToWallLine(p, this._floor.walls, SNAP_PX * this._upp, ignore);
+      if (onWall) return onWall;
+    }
     const refs: Point[] = [];
     for (const w of this._floor.walls) {
       if (ignore.includes(w)) continue;
@@ -717,7 +724,7 @@ export class FpEditor extends LitElement {
           const end = ev.shiftKey ? sp : orthoSnap(this._chainStart, sp);
           if (distance(end, this._chainStart) > 1) {
             const start = this._chainStart;
-            this._mutate((f) => f.walls.push({ id: newId("w"), x1: start.x, y1: start.y, x2: end.x, y2: end.y }));
+            this._mutate((f) => this._addWalls(f, start, end));
             this._chainStart = end;
           }
         }
@@ -732,6 +739,7 @@ export class FpEditor extends LitElement {
         }
         break;
       }
+      case "wallrect":
       case "rect": {
         this._drag = { ...base, mode: "rect", start: this._snap(p, ev) };
         this._svg.setPointerCapture(ev.pointerId);
@@ -755,7 +763,7 @@ export class FpEditor extends LitElement {
   private _onPointerMove(ev: PointerEvent): void {
     this._lastGuides = [];
     this._onPointerMoveInner(ev);
-    if (!this._drag && this._cursor && ["wall", "rect", "area", "item"].includes(this._tool)) this._snap(this._cursor, ev);
+    if (!this._drag && this._cursor && ["wall", "rect", "wallrect", "area", "item"].includes(this._tool)) this._snap(this._cursor, ev);
     this._setGuides(this._lastGuides);
   }
 
@@ -1006,6 +1014,21 @@ export class FpEditor extends LitElement {
     this._tool = "select";
   }
 
+  /** Teilt vorhandene Wände an a/b, legt nur noch nicht abgedeckte Wandstücke an. */
+  private _addWalls(f: Floor, a: Point, b: Point): void {
+    for (const pt of [a, b]) {
+      for (const w of [...f.walls]) {
+        const hit = projectOnSegment(pt, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+        if (distance(pt, hit.point) > 0.5 || distance(pt, { x: w.x1, y: w.y1 }) < 0.5 || distance(pt, { x: w.x2, y: w.y2 }) < 0.5) continue;
+        const rest: Wall = { ...w, id: newId("w"), x1: pt.x, y1: pt.y };
+        w.x2 = pt.x;
+        w.y2 = pt.y;
+        f.walls.push(rest);
+      }
+    }
+    for (const [p, q] of uncoveredParts(a, b, f.walls)) f.walls.push({ id: newId("w"), x1: p.x, y1: p.y, x2: q.x, y2: q.y });
+  }
+
   private _finishRect(a: Point, b: Point): void {
     const x1 = Math.min(a.x, b.x);
     const x2 = Math.max(a.x, b.x);
@@ -1020,16 +1043,15 @@ export class FpEditor extends LitElement {
     ];
     const id = newId("r");
     const n = this._floor.areas.length;
+    const wallsOnly = this._tool === "wallrect";
     this._mutate((f) => {
-      corners.forEach((c, i) => {
-        const d = corners[(i + 1) % 4];
-        const exists = f.walls.some(
-          (w) => (samePoint(w.x1, w.y1, c) && samePoint(w.x2, w.y2, d)) || (samePoint(w.x1, w.y1, d) && samePoint(w.x2, w.y2, c))
-        );
-        if (!exists) f.walls.push({ id: newId("w"), x1: c.x, y1: c.y, x2: d.x, y2: d.y });
-      });
-      f.areas.push({ id, name: `Raum ${n + 1}`, points: corners, color: ROOM_COLORS[n % ROOM_COLORS.length], sidebar: [] });
+      corners.forEach((c, i) => this._addWalls(f, c, corners[(i + 1) % 4]));
+      if (!wallsOnly) f.areas.push({ id, name: `Raum ${n + 1}`, points: corners, color: ROOM_COLORS[n % ROOM_COLORS.length], sidebar: [] });
     });
+    if (wallsOnly) {
+      this._tool = "select";
+      return;
+    }
     this._sel = { kind: "area", id };
     this._tool = "select";
   }
@@ -1269,7 +1291,7 @@ export class FpEditor extends LitElement {
               stroke-width=${this._draft.settings.wallThickness}></line>
         ${this._lengthLabel(this._chainStart, end, upp)}`;
     }
-    if (this._tool === "rect") {
+    if (this._tool === "rect" || this._tool === "wallrect") {
       const sp = this._snap(c, fake);
       const d = this._drag;
       if (d?.mode !== "rect") return svg`<circle class="cursor-dot" cx=${sp.x} cy=${sp.y} r=${4 * upp}></circle>`;
