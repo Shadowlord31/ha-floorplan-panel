@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Floorplan Panel",
+        "description": "Adds the floor plan as its own sidebar entry. Rooms, walls and devices are then edited directly in the panel."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Floorplan Panel is already set up."
+    }
+  },
+  "services": {
+    "show_room": {
+      "name": "Show room",
+      "description": "Zooms the open floor plan panel to a room and opens its sidebar.",
+      "fields": {
+        "room": {"name": "Room", "description": "ID or name of the room."},
+        "floor": {"name": "Floor", "description": "Floor ID (optional)."}
+      }
+    },
+    "reset_view": {
+      "name": "Reset view",
+      "description": "Zooms the open floor plan panel back out to the whole floor."
+    }
+  }
+}

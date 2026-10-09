@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Floorplan Panel",
+        "description": "Fügt den Grundriss als eigenen Eintrag in der Seitenleiste hinzu. Räume, Wände und Geräte werden danach direkt im Panel bearbeitet."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Floorplan Panel ist bereits eingerichtet."
+    }
+  },
+  "services": {
+    "show_room": {
+      "name": "Raum zeigen",
+      "description": "Zoomt im geöffneten Grundriss-Panel auf einen Raum und öffnet seine Seitenleiste.",
+      "fields": {
+        "room": {"name": "Raum", "description": "ID oder Name des Raums."},
+        "floor": {"name": "Etage", "description": "ID der Etage (optional)."}
+      }
+    },
+    "reset_view": {
+      "name": "Ansicht zurücksetzen",
+      "description": "Zoomt im geöffneten Grundriss-Panel wieder auf die ganze Etage."
+    }
+  }
+}

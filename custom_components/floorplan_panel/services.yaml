@@ -1,0 +1,13 @@
+show_room:
+  fields:
+    room:
+      required: true
+      example: "wohnzimmer"
+      selector:
+        text:
+    floor:
+      required: false
+      example: "eg"
+      selector:
+        text:
+reset_view:
