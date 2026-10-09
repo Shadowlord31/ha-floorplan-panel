@@ -156,3 +156,52 @@ async def test_show_room_service_reaches_subscribers(hass: HomeAssistant, hass_w
     msg = await ws.receive_json()
     assert msg["type"] == "event"
     assert msg["event"] == {"type": "show_room", "room": "Küche", "floor": None}
+
+
+def test_schema_window_shutter_and_glow_fields() -> None:
+    plan = validate_plan(
+        {
+            "floors": [
+                {
+                    "id": "eg",
+                    "openings": [
+                        {
+                            "id": "f",
+                            "type": "window",
+                            "x": 0,
+                            "y": 0,
+                            "length": 100,
+                            "entity": "binary_sensor.fenster",
+                            "sashes": 2,
+                            "openColor": "#ff0000",
+                            "shutterEntity": "cover.rollo",
+                            "shutterColor": "#8d6e63",
+                        },
+                        # Fenster ohne Kontakt bleibt gültig (nur Warnung im Editor)
+                        {"id": "f2", "type": "window", "x": 0, "y": 0, "length": 100},
+                    ],
+                    "items": [{"id": "l", "x": 1, "y": 1, "entity": "light.a", "glow": True, "glowRadius": 200, "glowColor": "#ffd9a0"}],
+                }
+            ]
+        }
+    )
+    window = plan["floors"][0]["openings"][0]
+    assert window["sashes"] == 2
+    assert window["shutterEntity"] == "cover.rollo"
+    assert plan["floors"][0]["items"][0]["glowRadius"] == 200
+
+
+@pytest.mark.parametrize(
+    "opening",
+    [
+        {"sashes": 3},
+        {"shutterEntity": "light.kein_rollo"},
+        {"shutterEntity": "cover rollo"},
+        {"openColor": "red;background:url(x)"},
+    ],
+)
+def test_schema_rejects_bad_window_fields(opening: dict) -> None:
+    with pytest.raises(vol.Invalid):
+        validate_plan(
+            {"floors": [{"id": "eg", "openings": [{"id": "f", "type": "window", "x": 0, "y": 0, "length": 100, **opening}]}]}
+        )

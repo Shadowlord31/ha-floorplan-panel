@@ -49,11 +49,19 @@ OPENING_SCHEMA = vol.Schema(
         vol.Required("y"): _COORD,
         vol.Required("length"): _POSITIVE,
         vol.Optional("angle", default=0): vol.All(vol.Coerce(float), vol.Range(min=-360, max=360)),
-        # Türanschlag: Seite des Scharniers und Aufschlagrichtung (relativ zur Wandrichtung)
+        # Anschlag: Seite des Scharniers und Aufschlagrichtung (relativ zur Wandrichtung)
         vol.Optional("hinge", default="left"): vol.In(["left", "right"]),
         vol.Optional("swing", default="in"): vol.In(["in", "out"]),
-        # Kontakt (binary_sensor) oder Rollo (cover) – optional
+        # Fenster: Fensterkontakt (binary_sensor, im Editor Pflichtfeld mit Warnung);
+        # Tür: Kontakt oder Schloss
         vol.Optional("entity"): _OPT_ENTITY,
+        # Anzahl der Fensterflügel (nur Fenster)
+        vol.Optional("sashes"): vol.All(vol.Coerce(int), vol.In([1, 2])),
+        # Farbe, solange die Öffnung offen ist
+        vol.Optional("openColor"): _COLOR,
+        # Rollo vor der Öffnung
+        vol.Optional("shutterEntity"): vol.Any(None, "", vol.All(str, vol.Match(r"^cover\.[a-z0-9_]+$"))),
+        vol.Optional("shutterColor"): _COLOR,
     },
     extra=vol.REMOVE_EXTRA,
 )
@@ -109,6 +117,10 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("showOnlyWhenZoomed", default=False): bool,
         # Raum-ID, falls das Icon außerhalb seines Raum-Polygons sitzt
         vol.Optional("area"): vol.Any(None, str),
+        # Lichtschein: ohne Wert automatisch an bei light.*
+        vol.Optional("glow"): vol.Any(None, bool),
+        vol.Optional("glowRadius"): vol.All(vol.Coerce(float), vol.Range(min=10, max=5000)),
+        vol.Optional("glowColor"): _COLOR,
     },
     extra=vol.REMOVE_EXTRA,
 )

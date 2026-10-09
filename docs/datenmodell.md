@@ -15,8 +15,17 @@ spiegelt die Typen in `frontend/src/types.ts`.
     {
       "id": "wohnung", "name": "Wohnung",
       "walls":    [{ "id": "w1", "x1": 50, "y1": 50, "x2": 950, "y2": 50, "thickness": 20 }],
-      "openings": [{ "id": "t1", "type": "door", "x": 650, "y": 650, "length": 90, "angle": 0,
-                     "hinge": "left", "swing": "in", "entity": "binary_sensor.tuer" }],
+      "openings": [
+        { "id": "t1", "type": "door", "x": 650, "y": 650, "length": 90, "angle": 0,
+          "hinge": "left", "swing": "out", "entity": "binary_sensor.tuer" },
+        { "id": "f1", "type": "window", "x": 300, "y": 50, "length": 180, "angle": 0,
+          "entity": "binary_sensor.fenster_wz",   // Fensterkontakt – Pflichtfeld (Warnung im Editor)
+          "sashes": 2,                            // 1 oder 2 Flügel
+          "hinge": "left", "swing": "in",         // Anschlag und Öffnungsrichtung
+          "openColor": "#ef6c00",                 // Farbe, solange offen
+          "shutterEntity": "cover.rollo_wz",      // Rollo (optional), liegt außen
+          "shutterColor": "#8d6e63" }
+      ],
       "areas": [{
         "id": "wohnzimmer", "name": "Wohnzimmer",
         "points": [{ "x": 50, "y": 50 }, { "x": 550, "y": 50 }, { "x": 550, "y": 400 }, { "x": 50, "y": 400 }],
@@ -34,7 +43,10 @@ spiegelt die Typen in `frontend/src/types.ts`.
         "entity": "light.wz_decke",       // optional
         "label": "Decke", "showState": false, "size": 34,
         "tapAction": "auto",              // auto | toggle | more-info | none
-        "showOnlyWhenZoomed": false, "area": null
+        "showOnlyWhenZoomed": false, "area": null,
+        "glow": null,                     // Lichtschein: null = automatisch (an bei light.*)
+        "glowRadius": 150,                // Reichweite bei voller Helligkeit
+        "glowColor": "#ffd9a0"            // Farbe für Lampen ohne rgb_color
       }]
     }
   ]
@@ -50,6 +62,17 @@ spiegelt die Typen in `frontend/src/types.ts`.
 | `furniture` (Formkatalog) | bewusst nicht vorhanden |
 | keine Raum-Übersicht | `areas[].sidebar`: Geräte/Szenen/Skripte je Raum |
 | `area.haArea` filtert den Picker | `area.haArea` liefert nur abschaltbare Vorschläge |
+
+## Fenster, Rollos, Lichtschein
+
+- **Fenster** brauchen einen Fensterkontakt (`binary_sensor`). Fehlt er, warnt der Editor
+  (Chip in der Werkzeugleiste, rot markiertes Fenster), Speichern bleibt möglich.
+  Offen werden Flügel und Öffnungsbogen in `openColor` gezeichnet; `unavailable` dimmt.
+- **Rollo**: Band auf der Außenseite (gegenüber `swing`). Die Tiefe zeigt den geschlossenen
+  Anteil aus `current_position` (100 = offen), sonst aus `open`/`closed`.
+- **Lichtschein**: radialer Verlauf, Farbe aus `rgb_color` oder `glowColor`, Helligkeit skaliert
+  Stärke und Reichweite. Begrenzt durch ein Sichtbarkeits-Polygon gegen die Wände. Licht fällt
+  durch offene Türen und durch Türen ohne Kontakt, nicht durch Fenster.
 
 ## Seitenleiste
 

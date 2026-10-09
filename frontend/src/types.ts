@@ -32,13 +32,26 @@ export interface Opening {
   length: number;
   /** Drehung in Grad; 0 = parallel zur x-Achse. */
   angle: number;
-  /** Seite des Scharniers (nur Türen). */
+  /** Seite des Scharniers. */
   hinge?: "left" | "right";
   /** Aufschlagrichtung: auf die positive (`in`) oder negative (`out`) Normalenseite. */
   swing?: "in" | "out";
-  /** Optional: Kontakt (binary_sensor) oder Rollo (cover); „offen“ wird hervorgehoben. */
+  /**
+   * Fenster: Fensterkontakt (binary_sensor) – im Editor Pflichtfeld mit Warnung.
+   * Tür: Kontakt oder Schloss, optional.
+   */
   entity?: string;
+  /** Anzahl der Fensterflügel (nur Fenster), Standard 1. */
+  sashes?: 1 | 2;
+  /** Farbe, solange die Öffnung offen ist. */
+  openColor?: string;
+  /** Rollo vor der Öffnung (cover). */
+  shutterEntity?: string;
+  shutterColor?: string;
 }
+
+export const DEFAULT_OPEN_COLOR = "#ef6c00";
+export const DEFAULT_SHUTTER_COLOR = "#8d6e63";
 
 /** Ein Eintrag der Raum-Seitenleiste: Entität, Szene oder Skript. */
 export interface SidebarEntry {
@@ -87,7 +100,16 @@ export interface FloorItem {
   showOnlyWhenZoomed?: boolean;
   /** Raum-ID, falls das Icon außerhalb seines Raum-Polygons liegt. */
   area?: string | null;
+  /** Lichtschein; ohne Wert automatisch an bei light.*. */
+  glow?: boolean | null;
+  /** Reichweite des Scheins bei voller Helligkeit, in Planeinheiten. */
+  glowRadius?: number;
+  /** Farbe des Scheins für Lampen ohne rgb_color. */
+  glowColor?: string;
 }
+
+export const DEFAULT_GLOW_RADIUS = 150;
+export const DEFAULT_GLOW_COLOR = "#ffd9a0";
 
 export interface Floor {
   id: string;

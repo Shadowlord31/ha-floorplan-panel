@@ -18,8 +18,9 @@ import {
   snapToGrid,
 } from "./geometry";
 import { domainOf, entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
+import { glowEnabled, glowReach, openingPassesLight, wallsLightPassesThrough } from "./light";
 import { maxWallThickness, planSvgStyles, renderArea, renderOpening, renderWalls, wallThickness } from "./render";
-import { newId, normalizePlan, type Area, type Floor, type FloorItem, type Opening, type Plan, type Point, type Wall } from "./types";
+import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, type Area, type Floor, type FloorItem, type Opening, type Plan, type Point, type Wall } from "./types";
 
 const DOMAIN = "floorplan_panel";
 const UNDO_LIMIT = 100;
@@ -234,6 +235,19 @@ export class FpEditor extends LitElement {
   private _collection(kind: Kind): (Wall | Opening | Area | FloorItem)[] {
     const f = this._floor;
     return kind === "wall" ? f.walls : kind === "opening" ? f.openings : kind === "area" ? f.areas : f.items;
+  }
+
+  /** Fenster ohne Fensterkontakt auf allen Etagen (Pflichtfeld, nur Warnung). */
+  private get _windowsWithoutContact(): { floorId: string; opening: Opening }[] {
+    return this._draft.floors.flatMap((f) =>
+      f.openings.filter((o) => o.type === "window" && !o.entity).map((opening) => ({ floorId: f.id, opening }))
+    );
+  }
+
+  private _selectOpening(floorId: string, id: string): void {
+    this._floorId = floorId;
+    this._sel = { kind: "opening", id };
+    this._tool = "select";
   }
 
   private _deleteSelected(): void {
@@ -630,6 +644,18 @@ export class FpEditor extends LitElement {
         <button class="icon-btn" title="Wiederholen (Strg+Y)" ?disabled=${!this._redo.length} @click=${this._doRedo}>
           <ha-icon icon="mdi:redo"></ha-icon>
         </button>
+        ${this._windowsWithoutContact.length
+          ? html`<button
+              class="warn-chip"
+              title="Fenster ohne Fensterkontakt – zum ersten springen"
+              @click=${() => {
+                const w = this._windowsWithoutContact[0];
+                this._selectOpening(w.floorId, w.opening.id);
+              }}
+            >
+              <ha-icon icon="mdi:alert"></ha-icon>${this._windowsWithoutContact.length} Fenster ohne Kontakt
+            </button>`
+          : nothing}
         <button class="save" ?disabled=${!this._dirty || this._saving} @click=${() => this._save()}>
           ${this._saving ? "Speichert …" : "Speichern"}
         </button>
@@ -717,7 +743,7 @@ export class FpEditor extends LitElement {
       </g>
       <g class="openings">
         ${floor.openings.map(
-          (o) => svg`<g data-kind="opening" data-id=${o.id}>${renderOpening(o, cut, { selected: sel?.kind === "opening" && sel.id === o.id })}</g>`
+          (o) => svg`<g data-kind="opening" data-id=${o.id}>${renderOpening(o, cut, { selected: sel?.kind === "opening" && sel.id === o.id, forceOpen: sel?.kind === "opening" && sel.id === o.id, warn: o.type === "window" && !o.entity })}</g>`
         )}
       </g>
       <g class="items">${floor.items.map((it) => this._renderItem(it, upp))}</g>
@@ -745,6 +771,16 @@ export class FpEditor extends LitElement {
   private _renderSelectionOverlay(upp: number) {
     const el = this._findSelected();
     if (!el || !this._sel) return nothing;
+    if (this._sel.kind === "item" && glowEnabled(el as FloorItem)) {
+      const it = el as FloorItem;
+      const r = it.glowRadius ?? DEFAULT_GLOW_RADIUS;
+      const thickness = (w: Wall) => wallThickness(w, this._draft);
+      const walls = wallsLightPassesThrough(this._floor.walls, this._floor.openings, (o) => openingPassesLight(o), thickness);
+      const reach = glowReach(it.x, it.y, r, walls, thickness);
+      return reach
+        ? svg`<polygon class="glow-reach" points=${reach.map((p) => `${p.x},${p.y}`).join(" ")} stroke-width=${1.5 * upp}></polygon>`
+        : svg`<circle class="glow-reach" cx=${it.x} cy=${it.y} r=${r} stroke-width=${1.5 * upp}></circle>`;
+    }
     const hr = HANDLE_RADIUS_PX * upp;
     if (this._sel.kind === "wall") {
       const w = el as Wall;
@@ -895,29 +931,59 @@ export class FpEditor extends LitElement {
   }
 
   private _renderOpeningProps(o: Opening) {
+    const isWindow = o.type === "window";
+    const missing = isWindow && !o.entity;
     return html`
+      ${isWindow
+        ? html`<div class="field ${missing ? "required-missing" : ""}">
+            <span>Fensterkontakt (Pflicht)</span>
+            <fp-entity-picker
+              .hass=${this.hass}
+              .value=${o.entity ?? ""}
+              .domains=${["binary_sensor"]}
+              placeholder="Fensterkontakt wählen …"
+              @value-changed=${(ev: CustomEvent<{ value: string }>) => this._setProp("entity", ev.detail.value)}
+            ></fp-entity-picker>
+            ${missing ? html`<span class="warn">Ohne Kontakt kann der Öffnungszustand nicht angezeigt werden.</span>` : nothing}
+          </div>`
+        : nothing}
       <label class="field">
         <span>Art</span>
         <select @change=${(ev: Event) => this._setProp("type", (ev.target as HTMLSelectElement).value)}>
           <option value="door" ?selected=${o.type === "door"}>Tür</option>
-          <option value="window" ?selected=${o.type === "window"}>Fenster</option>
+          <option value="window" ?selected=${isWindow}>Fenster</option>
         </select>
       </label>
       <div class="grid2">
         ${this._num("Breite", "length", o.length, { min: 10, max: 1000 })} ${this._num("Winkel", "angle", o.angle, { min: -360, max: 360, step: 15 })}
       </div>
-      ${o.type === "door"
-        ? html`<div class="btn-row">
-            <button @click=${() => this._setProp("hinge", o.hinge === "right" ? "left" : "right")}>
-              <ha-icon icon="mdi:swap-horizontal"></ha-icon> Anschlag
-            </button>
-            <button @click=${() => this._setProp("swing", o.swing === "out" ? "in" : "out")}>
-              <ha-icon icon="mdi:swap-vertical"></ha-icon> Richtung
-            </button>
-          </div>`
+      ${isWindow
+        ? html`<label class="field">
+            <span>Flügel</span>
+            <select @change=${(ev: Event) => this._setProp("sashes", Number((ev.target as HTMLSelectElement).value))}>
+              <option value="1" ?selected=${o.sashes !== 2}>Einflügelig</option>
+              <option value="2" ?selected=${o.sashes === 2}>Zweiflügelig</option>
+            </select>
+          </label>`
         : nothing}
-      ${this._entity("Kontakt / Rollo (optional)", "entity", o.entity, ["binary_sensor", "cover", "lock"])}
-      <p class="muted">Ist die Entität „offen“, wird die Öffnung farbig hervorgehoben. Ziehen schiebt sie entlang der Wände.</p>
+      <div class="btn-row">
+        ${!isWindow || o.sashes !== 2
+          ? html`<button @click=${() => this._setProp("hinge", o.hinge === "right" ? "left" : "right")}>
+              <ha-icon icon="mdi:swap-horizontal"></ha-icon> Anschlag
+            </button>`
+          : nothing}
+        <button @click=${() => this._setProp("swing", o.swing === "out" ? "in" : "out")}>
+          <ha-icon icon="mdi:swap-vertical"></ha-icon> Richtung
+        </button>
+      </div>
+      ${isWindow ? nothing : this._entity("Kontakt / Schloss (optional)", "entity", o.entity, ["binary_sensor", "lock"])}
+      ${this._color("Farbe wenn offen", "openColor", o.openColor, DEFAULT_OPEN_COLOR)}
+      <p class="muted">Im Editor wird die ausgewählte Öffnung geöffnet gezeigt. Ziehen schiebt sie entlang der Wände.</p>
+
+      <h4>Rollo</h4>
+      ${this._entity("Rollo (optional)", "shutterEntity", o.shutterEntity, ["cover"])}
+      ${o.shutterEntity ? this._color("Rollo-Farbe", "shutterColor", o.shutterColor, DEFAULT_SHUTTER_COLOR) : nothing}
+      <p class="muted">Das Rollo liegt auf der Außenseite (gegenüber der Öffnungsrichtung); die Tiefe zeigt, wie weit es geschlossen ist.</p>
     `;
   }
 
@@ -1076,6 +1142,19 @@ export class FpEditor extends LitElement {
         ${this._color("Farbe wenn an", "activeColor", it.activeColor, "#ffb300")}
       </div>
       ${this._check("Zustand anzeigen", "showState", it.showState)}
+      <h4>Lichtschein</h4>
+      <label class="check">
+        <input type="checkbox" .checked=${glowEnabled(it)} @change=${(ev: Event) => this._setProp("glow", (ev.target as HTMLInputElement).checked)} />
+        <span>Lichtschein anzeigen${it.glow === undefined || it.glow === null ? " (automatisch)" : ""}</span>
+      </label>
+      ${glowEnabled(it)
+        ? html`<div class="grid2">
+              ${this._num("Radius", "glowRadius", it.glowRadius, { min: 10, max: 5000, step: 10, placeholder: String(DEFAULT_GLOW_RADIUS) })}
+              ${this._color("Farbe ohne RGB", "glowColor", it.glowColor, DEFAULT_GLOW_COLOR)}
+            </div>
+            <p class="muted">Bei voller Helligkeit; gedimmt schrumpft der Schein. RGB-Lampen leuchten in ihrer eigenen Farbe. Die gestrichelte Kontur zeigt, wo Wände das Licht begrenzen.</p>`
+        : nothing}
+      <h4>Sichtbarkeit</h4>
       ${this._check("Nur zeigen, wenn der Raum gezoomt ist", "showOnlyWhenZoomed", it.showOnlyWhenZoomed)}
       ${it.showOnlyWhenZoomed
         ? html`<label class="field">
@@ -1128,6 +1207,17 @@ export class FpEditor extends LitElement {
       <p class="muted">
         ${floor.walls.length} Wände · ${floor.openings.length} Türen/Fenster · ${floor.areas.length} Räume · ${floor.items.length} Icons
       </p>
+      ${this._windowsWithoutContact.length
+        ? html`<h4>Fenster ohne Kontakt</h4>
+            <div class="room-list">
+              ${this._windowsWithoutContact.map(
+                ({ floorId, opening }) => html`<button class="room-btn warn-row" @click=${() => this._selectOpening(floorId, opening.id)}>
+                  <ha-icon icon="mdi:window-closed-variant"></ha-icon>${opening.id}
+                  <small>${this._draft.floors.find((f) => f.id === floorId)?.name || floorId}</small>
+                </button>`
+              )}
+            </div>`
+        : nothing}
       <h4>Räume</h4>
       <div class="room-list">
         ${floor.areas.length
@@ -1240,6 +1330,38 @@ export class FpEditor extends LitElement {
       }
       .toolbar .icon-btn:not(:disabled):hover {
         background: rgba(255, 255, 255, 0.15);
+      }
+      .warn-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: none;
+        border-radius: 16px;
+        padding: 6px 12px;
+        cursor: pointer;
+        background: var(--warning-color, #ffa600);
+        color: #000 !important;
+        font-size: 13px;
+        --mdc-icon-size: 18px;
+      }
+      .required-missing fp-entity-picker {
+        outline: 2px solid var(--error-color, #db4437);
+        border-radius: 8px;
+      }
+      .required-missing > span:first-child {
+        color: var(--error-color, #db4437);
+        font-weight: 500;
+      }
+      .warn-row ha-icon {
+        color: var(--warning-color, #ffa600);
+        --mdc-icon-size: 18px;
+      }
+      .glow-reach {
+        fill: #ffd54f;
+        fill-opacity: 0.12;
+        stroke: #ffb300;
+        stroke-dasharray: 6 4;
+        pointer-events: none;
       }
       .save {
         border: none;

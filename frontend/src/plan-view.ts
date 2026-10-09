@@ -21,6 +21,7 @@ import {
   toggleEntity,
   type HomeAssistant,
 } from "./ha";
+import { renderGlows } from "./light";
 import { planSvgStyles, renderArea, renderOpenings, renderWalls } from "./render";
 import type { Floor, FloorItem, Plan } from "./types";
 
@@ -139,6 +140,7 @@ export class FpPlanView extends LitElement {
                 })}</g>`
               )}
             </g>
+            ${renderGlows(floor, this.plan, this.hass, `${this._maskId}-glow`)}
             ${renderWalls(floor, this.plan, this._maskId)} ${renderOpenings(floor, this.plan, { hass: this.hass })}
           </svg>
           <div class="items">

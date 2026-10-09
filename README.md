@@ -9,6 +9,10 @@ Sidebar-Panel** anzeigt – kein Dashboard, keine Lovelace-Card.
 - Steuerung direkt aus der Seitenleiste (Schalten, Szene/Skript starten, Detaildialog).
 - Freie Icon-Platzierung auf dem Grundriss: beliebiges `mdi:`-Icon, Entität optional,
   kein Möbel-/Formkatalog.
+- Fenster mit Pflicht-Fensterkontakt: offen mit Flügeln und Öffnungsbogen (1 oder 2 Flügel),
+  Rollo davor (Stellung sichtbar), Farben einstellbar.
+- Lichtschein für Lampen, der an Wänden endet und durch offene Türen fällt; Farbe aus RGB,
+  Reichweite und Stärke aus der Helligkeit.
 - Visueller Editor im Panel: Wände, Türen, Fenster, Räume, Icons und die Seitenleiste je Raum.
 - Speicherung in `.storage/floorplan_panel.plan` (mit Revisionen und Verlauf in
   `.storage/floorplan_panel.history`).
