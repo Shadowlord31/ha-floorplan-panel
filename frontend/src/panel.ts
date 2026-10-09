@@ -1,6 +1,6 @@
 /**
  * Das Sidebar-Panel `floorplan-panel`: lädt den Grundriss über die WebSocket-API,
- * zeigt Etagen, Zoom und Raum-Seitenleiste und schaltet in den Editor um.
+ * zeigt Etagen, Zoom und das Raum-Popup und schaltet in den Editor um.
  */
 import { defineElement } from "./define";
 import { LitElement, css, html, nothing } from "lit";
@@ -8,7 +8,7 @@ import { property, state } from "lit/decorators.js";
 import "./editor";
 import type { HomeAssistant } from "./ha";
 import "./plan-view";
-import "./room-sidebar";
+import "./room-dialog";
 import { normalizePlan, type Plan } from "./types";
 
 const DOMAIN = "floorplan_panel";
@@ -192,23 +192,24 @@ export class FloorplanPanel extends LitElement {
                 </div>`
               : html`<p>Ein Administrator kann ihn im Editor anlegen.</p>`}
           </div>`
-        : html`<div class="body ${zoomed ? "with-sidebar" : ""}">
+        : html`<div class="body">
             <fp-plan-view
               .hass=${this.hass}
               .plan=${plan}
               .floor=${floor}
               .zoomedAreaId=${this._zoomedAreaId}
+              .popupOpen=${!!zoomed}
               @area-click=${this._onAreaClick}
               @background-click=${() => (this._zoomedAreaId = undefined)}
             ></fp-plan-view>
             ${zoomed
-              ? html`<fp-room-sidebar
+              ? html`<fp-room-dialog
                   .hass=${this.hass}
                   .area=${zoomed}
                   .canEdit=${this._isAdmin}
                   @close=${() => (this._zoomedAreaId = undefined)}
                   @edit-room=${(ev: CustomEvent<{ id: string }>) => this._openEditor(ev.detail.id)}
-                ></fp-room-sidebar>`
+                ></fp-room-dialog>`
               : nothing}
           </div>`}
     `;
@@ -283,36 +284,10 @@ export class FloorplanPanel extends LitElement {
       flex: 1;
       min-height: 0;
       display: flex;
+      position: relative;
     }
     fp-plan-view {
       flex: 1;
-      padding: 16px;
-    }
-    fp-room-sidebar {
-      width: 360px;
-      flex: none;
-      border-left: 1px solid var(--divider-color);
-      animation: slide-in 0.3s ease;
-    }
-    @keyframes slide-in {
-      from {
-        transform: translateX(40px);
-        opacity: 0;
-      }
-    }
-    :host([narrow]) .body {
-      flex-direction: column;
-    }
-    :host([narrow]) fp-plan-view {
-      padding: 8px;
-    }
-    :host([narrow]) fp-room-sidebar {
-      width: auto;
-      max-height: 55%;
-      border-left: none;
-      border-top: 1px solid var(--divider-color);
-      border-radius: 16px 16px 0 0;
-      box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
     }
     .message {
       margin: auto;

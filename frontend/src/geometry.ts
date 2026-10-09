@@ -5,7 +5,7 @@
  * aus easy-floorplan (src/render.ts, MIT, Copyright (c) 2026 Nicolas Sandller) portiert –
  * ohne die dortige Plan-Drehung, die dieses Projekt nicht braucht.
  */
-import type { Area, FloorItem, Point, Wall } from "./types";
+import type { Area, Floor, FloorItem, Plan, Point, Wall } from "./types";
 
 /** Höchster Einpass-Zoom, wenn ein Raum keinen eigenen Wert hat. */
 export const MAX_AREA_ZOOM_FIT = 4;
@@ -184,4 +184,53 @@ export function orthoSnap(from: Point, to: Point, toleranceDeg = 8): Point {
   if (angle < toleranceDeg || angle > 180 - toleranceDeg) return { x: to.x, y: from.y };
   if (Math.abs(angle - 90) < toleranceDeg) return { x: from.x, y: to.y };
   return to;
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Sichtbereich einer Etage: mindestens die Leinwand, erweitert um alles, was darüber
+ * hinausragt (Wandstärke, Türschwung, Rollos, Icons), plus ein kleiner Rand.
+ */
+export function contentBounds(floor: Floor, plan: Plan): Rect {
+  const { width, height } = plan.canvas;
+  let minX = 0;
+  let minY = 0;
+  let maxX = width;
+  let maxY = height;
+  const add = (x: number, y: number, m = 0) => {
+    minX = Math.min(minX, x - m);
+    minY = Math.min(minY, y - m);
+    maxX = Math.max(maxX, x + m);
+    maxY = Math.max(maxY, y + m);
+  };
+  const long = Math.max(width, height);
+  const defaultThickness = plan.settings?.wallThickness ?? 12;
+  for (const w of floor.walls) {
+    const m = (w.thickness ?? defaultThickness) / 2;
+    add(w.x1, w.y1, m);
+    add(w.x2, w.y2, m);
+  }
+  for (const a of floor.areas) for (const p of a.points) add(p.x, p.y);
+  for (const o of floor.openings) {
+    const rad = (o.angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const s = o.swing === "out" ? -1 : 1;
+    // Lokale Box: x entlang der Wand, y = Normale; Schwung auf der Swing-Seite, Rollos/Wand auf beiden
+    const side = 30;
+    const yMin = s > 0 ? -side : -(o.length + side);
+    const yMax = s > 0 ? o.length + side : side;
+    for (const lx of [-o.length / 2, o.length / 2])
+      for (const ly of [yMin, yMax]) add(o.x + lx * cos - ly * sin, o.y + lx * sin + ly * cos);
+  }
+  const itemMargin = long * 0.04;
+  for (const it of floor.items) add(it.x, it.y, itemMargin);
+  const pad = long * 0.03;
+  return { x: minX - pad, y: minY - pad, w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
 }

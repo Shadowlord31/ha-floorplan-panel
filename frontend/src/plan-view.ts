@@ -9,7 +9,15 @@
 import { defineElement } from "./define";
 import { LitElement, css, html, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
-import { areaZoomTransform, IDENTITY_ZOOM, itemHiddenUntilZoomed, resolveAreaZoom } from "./geometry";
+import {
+  areaZoomTransform,
+  contentBounds,
+  IDENTITY_ZOOM,
+  itemHiddenUntilZoomed,
+  resolveAreaZoom,
+  type Rect,
+  type ZoomTransform,
+} from "./geometry";
 import {
   canRun,
   domainOf,
@@ -31,6 +39,10 @@ const AUTO_TOGGLE = new Set(["light", "switch", "fan", "input_boolean", "siren"]
 /** Icons erscheinen gezoomt etwas größer als in der Gesamtansicht. */
 const ZOOMED_ITEM_SCALE = 1.35;
 const DEFAULT_ITEM_SIZE = 34;
+/** Breite des Raum-Popups (siehe room-dialog.ts) und Schwelle für das Bottom-Sheet. */
+export const POPUP_WIDTH_PX = 380;
+export const POPUP_NARROW_PX = 700;
+const POPUP_SHEET_FRAC = 0.55;
 
 let instanceCounter = 0;
 
@@ -40,6 +52,8 @@ export class FpPlanView extends LitElement {
   @property({ attribute: false }) plan!: Plan;
   @property({ attribute: false }) floor!: Floor;
   @property({ attribute: false }) zoomedAreaId?: string;
+  /** Ein Raum-Popup überdeckt einen Teil der Fläche: Zoom-Ziel dorthin verschieben, wo es sichtbar bleibt. */
+  @property({ type: Boolean }) popupOpen = false;
 
   @state() private _box = { w: 0, h: 0 };
 
@@ -58,13 +72,13 @@ export class FpPlanView extends LitElement {
   }
 
   protected updated(changed: PropertyValues): void {
-    if (changed.has("plan")) this._measure();
+    if (changed.has("plan") || changed.has("floor")) this._measure();
   }
 
-  /** Größte Box mit dem Seitenverhältnis der Leinwand, die in das Element passt. */
+  /** Größte Box mit dem Seitenverhältnis des Sichtbereichs, die in das Element passt. */
   private _measure(): void {
-    if (!this.plan) return;
-    const { width, height } = this.plan.canvas;
+    if (!this.plan || !this.floor) return;
+    const { w: width, h: height } = contentBounds(this.floor, this.plan);
     // Innenabstand abziehen; die Box selbst liegt absolut und beeinflusst die Größe des Elements nicht
     const cs = getComputedStyle(this);
     const availW = this.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -112,12 +126,21 @@ export class FpPlanView extends LitElement {
 
   protected render() {
     if (!this.plan || !this.floor) return nothing;
-    const { width, height } = this.plan.canvas;
     const floor = this.floor;
+    const view = contentBounds(floor, this.plan);
+    const { w: width, h: height } = view;
     const zoomed = floor.areas.find((a) => a.id === this.zoomedAreaId);
-    const zoom = zoomed
-      ? areaZoomTransform(zoomed.points, width, height, undefined, undefined, resolveAreaZoom(zoomed))
+    let zoom = zoomed
+      ? areaZoomTransform(
+          zoomed.points.map((p) => ({ x: p.x - view.x, y: p.y - view.y })),
+          width,
+          height,
+          undefined,
+          undefined,
+          resolveAreaZoom(zoomed)
+        )
       : IDENTITY_ZOOM;
+    if (zoomed && this.popupOpen && zoom.scale > 1) zoom = this._shiftForPopup(zoom);
     const inv = zoom.scale > 1 ? ZOOMED_ITEM_SCALE / zoom.scale : 1;
     const labelSize = Math.max(width, height) / 45;
     return html`
@@ -130,7 +153,7 @@ export class FpPlanView extends LitElement {
           class="plan-zoom"
           style="transform:translate(${zoom.txPercent}%, ${zoom.tyPercent}%) scale(${zoom.scale});--fp-inv-zoom:${inv}"
         >
-          <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">
+          <svg viewBox="${view.x} ${view.y} ${width} ${height}" preserveAspectRatio="xMidYMid meet">
             <g class="areas">
               ${floor.areas.map(
                 (a) => svg`<g @click=${(ev: Event) => this._onAreaClick(ev, a.id)}>${renderArea(a, {
@@ -147,14 +170,25 @@ export class FpPlanView extends LitElement {
           <div class="items">
             ${floor.items
               .filter((it) => !itemHiddenUntilZoomed(it, zoomed, floor.areas))
-              .map((it) => this._renderItem(it, width, height))}
+              .map((it) => this._renderItem(it, view))}
           </div>
         </div>
       </div>
     `;
   }
 
-  private _renderItem(item: FloorItem, width: number, height: number) {
+  /** Verschiebt den gezoomten Raum in den Bereich, den das Popup frei lässt (links bzw. oben). */
+  private _shiftForPopup(zoom: ZoomTransform): ZoomTransform {
+    if (!this._box.w || !this._box.h) return zoom;
+    const narrow = this.clientWidth < POPUP_NARROW_PX;
+    return narrow
+      ? { ...zoom, tyPercent: zoom.tyPercent - ((this.clientHeight * POPUP_SHEET_FRAC) / 2 / this._box.h) * 100 }
+      : { ...zoom, txPercent: zoom.txPercent - ((POPUP_WIDTH_PX + 32) / 2 / this._box.w) * 100 };
+  }
+
+  private _renderItem(item: FloorItem, view: Rect) {
+    const width = view.w;
+    const height = view.h;
     const stateObj = item.entity ? this.hass.states[item.entity] : undefined;
     const active = isActive(stateObj);
     const unavailable = !!item.entity && isUnavailable(stateObj);
@@ -165,7 +199,7 @@ export class FpPlanView extends LitElement {
     return html`
       <div
         class="item ${active ? "active" : ""} ${unavailable ? "unavailable" : ""} ${item.entity ? "interactive" : ""}"
-        style="left:${(item.x / width) * 100}%;top:${(item.y / height) * 100}%;--fp-item-size:${size}px;${color
+        style="left:${((item.x - view.x) / width) * 100}%;top:${((item.y - view.y) / height) * 100}%;--fp-item-size:${size}px;${color
           ? `--fp-item-color:${color}`
           : ""}"
         title=${title}
@@ -186,6 +220,7 @@ export class FpPlanView extends LitElement {
         display: block;
         position: relative;
         overflow: hidden;
+        background: var(--fp-floor-color, var(--card-background-color, #fff));
         min-height: 0;
         min-width: 0;
       }
@@ -194,10 +229,8 @@ export class FpPlanView extends LitElement {
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
-        overflow: hidden;
-        border-radius: 12px;
-        background: var(--fp-floor-color, var(--card-background-color, #fff));
-        box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0, 0, 0, 0.12));
+        /* Gezoomter Inhalt darf über die Box hinaus die ganze Fläche nutzen; :host schneidet ab */
+        overflow: visible;
       }
       .plan-zoom {
         position: absolute;
@@ -211,6 +244,7 @@ export class FpPlanView extends LitElement {
         }
       }
       svg {
+        overflow: visible;
         position: absolute;
         inset: 0;
         width: 100%;

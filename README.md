@@ -3,10 +3,10 @@
 Eigene Home-Assistant-Integration, die einen **2D-Grundriss** der Wohnung als **eigenes
 Sidebar-Panel** anzeigt – kein Dashboard, keine Lovelace-Card.
 
-- Tippen auf einen Raum zoomt auf den Raum und öffnet eine **Seitenleiste** mit den
+- Tippen auf einen Raum zoomt auf den Raum und öffnet ein **Popup** mit den
   Geräten, Szenen und Skripten, die diesem Raum **explizit zugeordnet** sind
   (keine automatische Übernahme aller Area-Entitäten).
-- Steuerung direkt aus der Seitenleiste (Schalten, Szene/Skript starten, Detaildialog).
+- Steuerung direkt aus dem Popup (Schalten, Szene/Skript starten, Detaildialog).
 - Freie Icon-Platzierung auf dem Grundriss: beliebiges `mdi:`-Icon, Entität optional,
   kein Möbel-/Formkatalog.
 - Fenster mit bis zu 4 Flügeln (Breite und optionaler Sensor je Flügel), offen mit
@@ -41,7 +41,7 @@ kann im Panel ein frei erfundener Beispiel-Grundriss geladen werden.
 
 | Dienst | Wirkung |
 | --- | --- |
-| `floorplan_panel.show_room` | Zoomt im offenen Panel auf einen Raum (`room`: ID oder Name, optional `floor`) und öffnet die Seitenleiste |
+| `floorplan_panel.show_room` | Zoomt im offenen Panel auf einen Raum (`room`: ID oder Name, optional `floor`) und öffnet das Popup |
 | `floorplan_panel.reset_view` | Zoomt zurück auf die ganze Etage |
 
 ## Entwicklung

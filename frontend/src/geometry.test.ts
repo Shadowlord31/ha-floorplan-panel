@@ -108,3 +108,37 @@ describe("Fang", () => {
     expect(orthoSnap({ x: 0, y: 0 }, { x: 100, y: 100 })).toEqual({ x: 100, y: 100 });
   });
 });
+
+import { contentBounds } from "./geometry";
+import { normalizePlan } from "./types";
+
+describe("contentBounds", () => {
+  const base = () =>
+    normalizePlan({
+      canvas: { width: 1000, height: 800 },
+      floors: [{ id: "eg", name: "", walls: [], areas: [], items: [], openings: [] }],
+    } as never);
+
+  it("entspricht bei leerem Plan der Leinwand plus Rand", () => {
+    const plan = base();
+    const b = contentBounds(plan.floors[0], plan);
+    expect(b.x).toBeCloseTo(-30);
+    expect(b.w).toBeCloseTo(1060);
+    expect(b.h).toBeCloseTo(860);
+  });
+
+  it("wächst, wenn ein Türschwung über den unteren Rand ragt", () => {
+    const plan = base();
+    plan.floors[0].openings.push({ id: "t", type: "door", x: 500, y: 790, length: 90, angle: 0, swing: "in" });
+    const b = contentBounds(plan.floors[0], plan);
+    expect(b.y + b.h).toBeGreaterThan(790 + 90 + 30);
+  });
+
+  it("beachtet die Drehung und die Schwungseite", () => {
+    const plan = base();
+    plan.floors[0].openings.push({ id: "t", type: "door", x: 10, y: 400, length: 100, angle: 90, swing: "out" });
+    const b = contentBounds(plan.floors[0], plan);
+    // angle 90: Normale zeigt nach -x, "out" schwingt nach +x; links ragt nur der Rollo-Rand (30) über
+    expect(b.x).toBeCloseTo(-50, 0);
+  });
+});
