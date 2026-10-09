@@ -3,13 +3,14 @@
  * `ha-entity-picker` wird nur bei Bedarf nachgeladen und steht in einem
  * Custom-Panel nicht verlässlich zur Verfügung – daher ein eigener.
  */
+import { defineElement } from "./define";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, query, state } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 import { domainOf, entityIcon, type HomeAssistant } from "./ha";
 
 const MAX_RESULTS = 60;
 
-@customElement("fp-entity-picker")
+@defineElement("fp-entity-picker")
 export class FpEntityPicker extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   /** Aktuelle entity_id (leer = keine). */

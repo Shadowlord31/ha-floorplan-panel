@@ -6,8 +6,9 @@
  * transformierten Wrapper (`transform-origin: 0 0`), damit beide Schichten identisch
  * mitzoomen; die Icons skalieren sich über `--fp-inv-zoom` zurück.
  */
+import { defineElement } from "./define";
 import { LitElement, css, html, nothing, svg, unsafeCSS, type PropertyValues } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 import { areaZoomTransform, IDENTITY_ZOOM, itemHiddenUntilZoomed, resolveAreaZoom } from "./geometry";
 import {
   canRun,
@@ -33,7 +34,7 @@ const DEFAULT_ITEM_SIZE = 34;
 
 let instanceCounter = 0;
 
-@customElement("fp-plan-view")
+@defineElement("fp-plan-view")
 export class FpPlanView extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property({ attribute: false }) plan!: Plan;

@@ -2,8 +2,9 @@
  * Das Sidebar-Panel `floorplan-panel`: lädt den Grundriss über die WebSocket-API,
  * zeigt Etagen, Zoom und Raum-Seitenleiste und schaltet in den Editor um.
  */
+import { defineElement } from "./define";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 import "./editor";
 import type { HomeAssistant } from "./ha";
 import "./plan-view";
@@ -17,7 +18,7 @@ type PanelEvent =
   | { type: "show_room"; room: string; floor?: string | null }
   | { type: "reset_view" };
 
-@customElement("floorplan-panel")
+@defineElement("floorplan-panel")
 export class FloorplanPanel extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property({ type: Boolean, reflect: true }) narrow = false;

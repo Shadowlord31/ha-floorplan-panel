@@ -2,8 +2,9 @@
  * Seitenleiste eines Raums: zeigt die im Editor explizit zugeordneten Geräte, Szenen und
  * Skripte und erlaubt die direkte Bedienung (Schalten, Ausführen, Detaildialog).
  */
+import { defineElement } from "./define";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { property } from "lit/decorators.js";
 import {
   canRun,
   canToggle,
@@ -28,7 +29,7 @@ const GROUPS: { kind: EntityKind; title: string }[] = [
   { kind: "script", title: "Skripte" },
 ];
 
-@customElement("fp-room-sidebar")
+@defineElement("fp-room-sidebar")
 export class FpRoomSidebar extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property({ attribute: false }) area!: Area;

@@ -1,3 +1,8 @@
+function it(t) {
+  return (e) => {
+    customElements.get(t) || customElements.define(t, e);
+  };
+}
 /**
  * @license
  * Copyright 2019 Google LLC
@@ -22,7 +27,7 @@ let ne = class {
     return this.cssText;
   }
 };
-const It = (t) => new ne(typeof t == "string" ? t : t + "", void 0, Mt), it = (t, ...e) => {
+const It = (t) => new ne(typeof t == "string" ? t : t + "", void 0, Mt), st = (t, ...e) => {
   const i = t.length === 1 ? t[0] : e.reduce((s, n, o) => s + ((r) => {
     if (r._$cssResult$ === !0) return r.cssText;
     if (typeof r == "number") return r;
@@ -341,7 +346,7 @@ class Ue {
     for (; l !== void 0; ) {
       if (r === l.index) {
         let c;
-        l.type === 2 ? c = new st(o, o.nextSibling, this, e) : l.type === 1 ? c = new l.ctor(o, l.name, l.strings, this, e) : l.type === 6 && (c = new Fe(o, this, e)), this._$AV.push(c), l = s[++a];
+        l.type === 2 ? c = new nt(o, o.nextSibling, this, e) : l.type === 1 ? c = new l.ctor(o, l.name, l.strings, this, e) : l.type === 6 && (c = new Fe(o, this, e)), this._$AV.push(c), l = s[++a];
       }
       r !== l?.index && (o = L.nextNode(), r++);
     }
@@ -352,7 +357,7 @@ class Ue {
     for (const s of this._$AV) s !== void 0 && (s.strings !== void 0 ? (s._$AI(e, s, i), i += s.strings.length - 2) : s._$AI(e[i])), i++;
   }
 }
-class st {
+class nt {
   get _$AU() {
     return this._$AM?._$AU ?? this._$Cv;
   }
@@ -398,7 +403,7 @@ class st {
     Nt(this._$AH) || (this._$AH = [], this._$AR());
     const i = this._$AH;
     let s, n = 0;
-    for (const o of e) n === i.length ? i.push(s = new st(this.O(Q()), this.O(Q()), this, this.options)) : s = i[n], s._$AI(o), n++;
+    for (const o of e) n === i.length ? i.push(s = new nt(this.O(Q()), this.O(Q()), this, this.options)) : s = i[n], s._$AI(o), n++;
     n < i.length && (this._$AR(s && s._$AB.nextSibling, n), i.length = n);
   }
   _$AR(e = this._$AA.nextSibling, i) {
@@ -477,13 +482,13 @@ class Fe {
   }
 }
 const He = Tt.litHtmlPolyfillSupport;
-He?.(et, st), (Tt.litHtmlVersions ??= []).push("3.3.3");
+He?.(et, nt), (Tt.litHtmlVersions ??= []).push("3.3.3");
 const je = (t, e, i) => {
   const s = i?.renderBefore ?? e;
   let n = s._$litPart$;
   if (n === void 0) {
     const o = i?.renderBefore ?? null;
-    s._$litPart$ = n = new st(e.insertBefore(Q(), o), o, void 0, i ?? {});
+    s._$litPart$ = n = new nt(e.insertBefore(Q(), o), o, void 0, i ?? {});
   }
   return n._$AI(t), n;
 };
@@ -519,16 +524,6 @@ O._$litElement$ = !0, O.finalized = !0, Ut.litElementHydrateSupport?.({ LitEleme
 const Be = Ut.litElementPolyfillSupport;
 Be?.({ LitElement: O });
 (Ut.litElementVersions ??= []).push("4.2.2");
-/**
- * @license
- * Copyright 2017 Google LLC
- * SPDX-License-Identifier: BSD-3-Clause
- */
-const nt = (t) => (e, i) => {
-  i !== void 0 ? i.addInitializer(() => {
-    customElements.define(t, e);
-  }) : customElements.define(t, e);
-};
 /**
  * @license
  * Copyright 2017 Google LLC
@@ -766,7 +761,7 @@ let k = class extends O {
     `;
   }
 };
-k.styles = it`
+k.styles = st`
     :host {
       display: block;
       position: relative;
@@ -884,7 +879,7 @@ E([
   de("input")
 ], k.prototype, "_input", 2);
 k = E([
-  nt("fp-entity-picker")
+  it("fp-entity-picker")
 ], k);
 const ei = 4, ii = 10, Pt = { scale: 1, txPercent: 0, tyPercent: 0 };
 function si(t, e, i, s = 0.15, n = ei, o) {
@@ -2151,7 +2146,7 @@ let b = class extends O {
 };
 b.styles = [
   It(ke),
-  it`
+  st`
       :host {
         display: flex;
         flex-direction: column;
@@ -2784,7 +2779,7 @@ $([
   de("svg.canvas")
 ], b.prototype, "_svg", 2);
 b = $([
-  nt("fp-editor")
+  it("fp-editor")
 ], b);
 function j(t) {
   return Math.round(t * 10) / 10;
@@ -2892,7 +2887,7 @@ let zi = 0, R = class extends O {
 };
 R.styles = [
   It(ke),
-  it`
+  st`
       :host {
         display: block;
         position: relative;
@@ -3009,7 +3004,7 @@ V([
   y()
 ], R.prototype, "_box", 2);
 R = V([
-  nt("fp-plan-view")
+  it("fp-plan-view")
 ], R);
 var Ci = Object.defineProperty, Oi = Object.getOwnPropertyDescriptor, yt = (t, e, i, s) => {
   for (var n = s > 1 ? void 0 : s ? Oi(e, i) : e, o = t.length - 1, r; o >= 0; o--)
@@ -3114,7 +3109,7 @@ let q = class extends O {
     this.hass.callService(t, e, { entity_id: i });
   }
 };
-q.styles = it`
+q.styles = st`
     :host {
       display: flex;
       flex-direction: column;
@@ -3314,7 +3309,7 @@ yt([
   v({ type: Boolean })
 ], q.prototype, "canEdit", 2);
 q = yt([
-  nt("fp-room-sidebar")
+  it("fp-room-sidebar")
 ], q);
 var Ii = Object.defineProperty, Ri = Object.getOwnPropertyDescriptor, P = (t, e, i, s) => {
   for (var n = s > 1 ? void 0 : s ? Ri(e, i) : e, o = t.length - 1, r; o >= 0; o--)
@@ -3450,7 +3445,7 @@ let S = class extends O {
     `;
   }
 };
-S.styles = it`
+S.styles = st`
     :host {
       display: flex;
       flex-direction: column;
@@ -3614,5 +3609,5 @@ P([
   y()
 ], S.prototype, "_error", 2);
 S = P([
-  nt("floorplan-panel")
+  it("floorplan-panel")
 ], S);

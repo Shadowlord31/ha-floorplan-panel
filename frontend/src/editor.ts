@@ -5,8 +5,9 @@
  * Bedienkonzept angelehnt an den Editor von easy-floorplan (MIT): Werkzeugleiste,
  * Raster- und Endpunktfang, Ziehgriffe, Eigenschaften der Auswahl in einer Leiste.
  */
+import { defineElement } from "./define";
 import { LitElement, css, html, nothing, svg, unsafeCSS, type PropertyValues, type TemplateResult } from "lit";
-import { customElement, property, query, state } from "lit/decorators.js";
+import { property, query, state } from "lit/decorators.js";
 import "./entity-picker";
 import {
   distance,
@@ -99,7 +100,7 @@ const QUICK_ICONS = [
 
 const ROOM_COLORS = ["#4f8bd6", "#e0a030", "#3fb5a8", "#8e6cc9", "#d65f5f", "#6aa84f", "#9e9e9e"];
 
-@customElement("fp-editor")
+@defineElement("fp-editor")
 export class FpEditor extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property({ attribute: false }) plan!: Plan;
