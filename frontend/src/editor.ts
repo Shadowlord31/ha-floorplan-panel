@@ -70,7 +70,9 @@ interface DragState {
   /** Beim Ziehen mitbewegte Wand-Endpunkte und Raumecken, die auf dem gezogenen Punkt liegen. */
   links?: Link[];
   /** Kanten-Ziehen: Normale und alle auf der Kante liegenden Punkte. */
-  edge?: { n: Point; pts: { x: number; y: number; set: (x: number, y: number) => void }[] };
+  edge?: { n: Point; pts: { x: number; y: number; set: (x: number, y: number) => void; wall?: Wall; vert?: Point }[] };
+  /** Griff eines Wand-Raums (Raum ohne Fläche). */
+  wr?: boolean;
   viewStart?: View;
 }
 
@@ -162,6 +164,7 @@ export class FpEditor extends LitElement {
   @state() private _marquee?: { a: Point; b: Point };
   @state() private _guides: Guide[] = [];
   private _lastGuides: Guide[] = [];
+  @state() private _wallRoom?: { walls: { id: string; flip: boolean }[] };
   @state() private _menu?: { x: number; y: number };
   private _lpTimer?: number;
   @state() private _leafSel?: number;
@@ -681,6 +684,32 @@ export class FpEditor extends LitElement {
           }, 550);
         }
         const additive = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+        const wrPts = this._wallRoomPts();
+        if (hit?.kind === "handle" && wrPts && !this._sel) {
+          const i = Number(hit.handle!.slice(1));
+          const n = wrPts.length;
+          this._drag = { ...base, mode: "handle", wr: true, handle: hit.handle };
+          this._drag.edge = hit.handle!.startsWith("e")
+            ? this._edgeSetup(wrPts[i], wrPts[(i + 1) % n])
+            : { n: { x: 0, y: 0 }, pts: this._movers((q) => distance(q, wrPts[i]) < 0.5) };
+          this._svg.setPointerCapture(ev.pointerId);
+          break;
+        }
+        if (hit?.kind === "wall" && !additive) {
+          const w = this._floor.walls.find((x) => x.id === hit.id);
+          const inRoom = this._wallRoom?.walls.some((x) => x.id === hit.id);
+          const loop = w && !inRoom && !wallRooms(w, this._floor.areas).length ? this._findLoop(w) : undefined;
+          if (loop) {
+            this._wallRoom = { walls: loop };
+            this._sel = undefined;
+            this._setGroup([]);
+            const pts = this._wallRoomPts()!;
+            this._drag = { ...base, mode: "group", origs: this._wallRoomGroup(pts).map((s) => ({ sel: s, orig: structuredClone(this._elementOf(s)) })) };
+            this._svg.setPointerCapture(ev.pointerId);
+            break;
+          }
+        }
+        this._wallRoom = undefined;
         if (hit && hit.kind !== "handle" && additive) {
           this._toggleMulti(hit.kind, hit.id);
           break;
@@ -703,7 +732,7 @@ export class FpEditor extends LitElement {
             const end = hit.handle === "p1" ? 1 : 2;
             this._drag.links = [this._linksAt(el as Wall, end)];
           } else if (this._sel.kind === "area" && el && hit.handle?.startsWith("e")) {
-            this._drag.edge = this._edgeSetup(el as Area, Number(hit.handle.slice(1)));
+            this._drag.edge = this._edgeSetup((el as Area).points[Number(hit.handle.slice(1))], (el as Area).points[(Number(hit.handle.slice(1)) + 1) % (el as Area).points.length]);
           } else if (this._sel.kind === "area" && el && hit.handle?.startsWith("v")) {
             const pt = (el as Area).points[Number(hit.handle!.slice(1))];
             this._drag.links = [this._linksAt(undefined, 0, pt, el as Area)];
@@ -806,6 +835,19 @@ export class FpEditor extends LitElement {
     if (d.mode === "pan" && d.viewStart) {
       const upp = this._upp;
       this._view = { ...d.viewStart, x: d.viewStart.x - dxScreen * upp, y: d.viewStart.y - dyScreen * upp };
+      return;
+    }
+    if (d.mode === "handle" && d.wr && d.handle && d.edge) {
+      const { n, pts } = d.edge;
+      if (d.handle.startsWith("e")) {
+        const gs = ev.altKey ? 0 : this._draft.settings.grid;
+        const amount = snapToGrid((p.x - d.start.x) * n.x + (p.y - d.start.y) * n.y, gs);
+        for (const q of pts) q.set(q.x + n.x * amount, q.y + n.y * amount);
+      } else {
+        const np = this._snap(p, ev, pts.flatMap((q) => (q.wall ? [q.wall] : [])), pts.flatMap((q) => (q.vert ? [q.vert] : [])));
+        for (const q of pts) q.set(np.x, np.y);
+      }
+      this._draft = { ...this._draft };
       return;
     }
     const el = this._findSelected() as any;
@@ -975,6 +1017,9 @@ export class FpEditor extends LitElement {
       else this._sel = undefined;
     } else if (ev.key === "Enter" && this._tool === "area" && this._roomPoints.length >= 3) {
       this._finishRoom();
+    } else if ((ev.key === "Delete" || ev.key === "Backspace") && !this._sel && this._wallRoomPts()) {
+      ev.preventDefault();
+      this._deleteWallRoom();
     } else if ((ev.key === "Delete" || ev.key === "Backspace") && this._group.length) {
       ev.preventDefault();
       this._deleteSelected();
@@ -1254,6 +1299,17 @@ export class FpEditor extends LitElement {
         return b ? svg`<rect class="sel-outline" x=${b.x - pad} y=${b.y - pad} width=${b.w + 2 * pad} height=${b.h + 2 * pad} stroke-width=${2 * upp}></rect>` : nothing;
       })}`;
     }
+    const wr = this._sel ? undefined : this._wallRoomPts();
+    if (wr) {
+      const hr = HANDLE_RADIUS_PX * upp;
+      return svg`
+        <polygon class="sel-outline" points=${wr.map((p) => `${p.x},${p.y}`).join(" ")} stroke-width=${2 * upp}></polygon>
+        ${wr.map((p, i) => svg`<circle class="handle" data-handle="v${i}" cx=${p.x} cy=${p.y} r=${hr} stroke-width=${2 * upp}></circle>`)}
+        ${wr.map((p, i) => {
+          const q = wr[(i + 1) % wr.length];
+          return svg`<rect class="handle" data-handle="e${i}" x=${(p.x + q.x) / 2 - hr} y=${(p.y + q.y) / 2 - hr} width=${2 * hr} height=${2 * hr} rx=${hr / 3} stroke-width=${2 * upp}></rect>`;
+        })}`;
+    }
     const el = this._findSelected();
     if (!el || !this._sel) return nothing;
     if (this._sel.kind === "item" && glowEnabled(el as FloorItem)) {
@@ -1347,6 +1403,18 @@ export class FpEditor extends LitElement {
 
   private _renderProps(): TemplateResult {
     if (this._multi.length > 1) return this._renderMultiProps();
+    if (!this._sel && this._wallRoomPts()) {
+      const r = axisRect(this._wallRoomPts()!);
+      return html`
+        <div class="props-head"><h3>Raum aus Wänden</h3></div>
+        ${r ? html`<p class="muted">${formatLength(r.w)} × ${formatLength(r.h)}</p>` : nothing}
+        <div class="row-btns">
+          <button class="chip" @click=${this._wallRoomToArea}><ha-icon icon="mdi:vector-polygon"></ha-icon>Raumfläche anlegen</button>
+          <button class="chip" @click=${this._deleteWallRoom}><ha-icon icon="mdi:delete-outline"></ha-icon>Löschen</button>
+        </div>
+        <p class="muted">Ziehen verschiebt den Raum samt Wänden. Griffe an Ecken und Kanten ändern die Größe. Ein weiterer Klick auf eine Wand wählt nur die Wand. Mit „Raumfläche anlegen“ wird daraus ein Raum mit Seitenleiste und Icons.</p>
+      `;
+    }
     const el = this._findSelected();
     if (!el || !this._sel) return this._renderPlanProps();
     const kindLabel = { wall: "Wand", opening: (el as Opening).type === "window" ? "Fenster" : "Tür", area: "Raum", item: "Icon" }[this._sel.kind];
@@ -1480,21 +1548,105 @@ export class FpEditor extends LitElement {
     return out;
   }
 
-  private _edgeSetup(a: Area, i: number): DragState["edge"] {
-    const p = a.points[i];
-    const q = a.points[(i + 1) % a.points.length];
-    const len = distance(p, q) || 1;
-    const n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+  private _movers(pred: (p: Point) => boolean): NonNullable<DragState["edge"]>["pts"] {
     const pts: NonNullable<DragState["edge"]>["pts"] = [];
-    const on = (pt: Point) => pointOnSegment(pt, p, q);
     for (const area of this._floor.areas) {
-      for (const v of area.points) if (on(v)) pts.push({ x: v.x, y: v.y, set: (x, y) => Object.assign(v, { x, y }) });
+      for (const v of area.points) if (pred(v)) pts.push({ x: v.x, y: v.y, vert: v, set: (x, y) => Object.assign(v, { x, y }) });
     }
     for (const w of this._floor.walls) {
-      if (on({ x: w.x1, y: w.y1 })) pts.push({ x: w.x1, y: w.y1, set: (x, y) => Object.assign(w, { x1: x, y1: y }) });
-      if (on({ x: w.x2, y: w.y2 })) pts.push({ x: w.x2, y: w.y2, set: (x, y) => Object.assign(w, { x2: x, y2: y }) });
+      if (pred({ x: w.x1, y: w.y1 })) pts.push({ x: w.x1, y: w.y1, wall: w, set: (x, y) => Object.assign(w, { x1: x, y1: y }) });
+      if (pred({ x: w.x2, y: w.y2 })) pts.push({ x: w.x2, y: w.y2, wall: w, set: (x, y) => Object.assign(w, { x2: x, y2: y }) });
     }
-    return { n, pts };
+    return pts;
+  }
+
+  private _edgeSetup(p: Point, q: Point): NonNullable<DragState["edge"]> {
+    const len = distance(p, q) || 1;
+    const n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+    return { n, pts: this._movers((pt) => pointOnSegment(pt, p, q)) };
+  }
+
+  /** Kürzester geschlossener Wandzug durch die Wand (Raum ohne Fläche). */
+  private _findLoop(w: Wall): { id: string; flip: boolean }[] | undefined {
+    const key = (x: number, y: number) => `${Math.round(x)},${Math.round(y)}`;
+    const adj = new Map<string, { w: Wall; to: string; flip: boolean }[]>();
+    for (const x of this._floor.walls) {
+      const k1 = key(x.x1, x.y1);
+      const k2 = key(x.x2, x.y2);
+      if (k1 === k2) continue;
+      (adj.get(k1) ?? adj.set(k1, []).get(k1)!).push({ w: x, to: k2, flip: false });
+      (adj.get(k2) ?? adj.set(k2, []).get(k2)!).push({ w: x, to: k1, flip: true });
+    }
+    const start = key(w.x2, w.y2);
+    const goal = key(w.x1, w.y1);
+    if (start === goal) return undefined;
+    const prev = new Map<string, { from: string; w: Wall; flip: boolean }>();
+    const queue = [start];
+    const seen = new Set([start]);
+    while (queue.length && !seen.has(goal)) {
+      const cur = queue.shift()!;
+      for (const e of adj.get(cur) ?? []) {
+        if (e.w === w || seen.has(e.to)) continue;
+        seen.add(e.to);
+        prev.set(e.to, { from: cur, w: e.w, flip: e.flip });
+        queue.push(e.to);
+      }
+    }
+    if (!seen.has(goal)) return undefined;
+    const path: { id: string; flip: boolean }[] = [];
+    for (let k = goal; k !== start; ) {
+      const step = prev.get(k)!;
+      path.unshift({ id: step.w.id, flip: step.flip });
+      k = step.from;
+    }
+    const loop = [{ id: w.id, flip: false }, ...path];
+    return loop.length >= 3 ? loop : undefined;
+  }
+
+  private _wallRoomPts(): Point[] | undefined {
+    if (!this._wallRoom) return undefined;
+    const pts: Point[] = [];
+    for (const { id, flip } of this._wallRoom.walls) {
+      const w = this._floor.walls.find((x) => x.id === id);
+      if (!w) return undefined;
+      pts.push(flip ? { x: w.x2, y: w.y2 } : { x: w.x1, y: w.y1 });
+    }
+    return pts;
+  }
+
+  private _wallRoomGroup(pts: Point[]): Selection[] {
+    const f = this._floor;
+    const ids = new Set(this._wallRoom!.walls.map((w) => w.id));
+    const walls = f.walls.filter((w) => ids.has(w.id));
+    const out: Selection[] = walls.map((w) => ({ kind: "wall" as const, id: w.id }));
+    for (const o of f.openings) {
+      if (walls.some((w) => pointOnSegment({ x: o.x, y: o.y }, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }, 3))) out.push({ kind: "opening", id: o.id });
+    }
+    for (const i of f.items) if (pointInPolygon(pts, i.x, i.y)) out.push({ kind: "item", id: i.id });
+    return out;
+  }
+
+  private _wallRoomToArea(): void {
+    const pts = this._wallRoomPts();
+    if (!pts) return;
+    const id = newId("r");
+    const n = this._floor.areas.length;
+    this._mutate((f) => f.areas.push({ id, name: `Raum ${n + 1}`, points: pts, color: ROOM_COLORS[n % ROOM_COLORS.length], sidebar: [] }));
+    this._wallRoom = undefined;
+    this._sel = { kind: "area", id };
+  }
+
+  private _deleteWallRoom(): void {
+    const pts = this._wallRoomPts();
+    if (!pts) return;
+    const sels = this._wallRoomGroup(pts);
+    this._mutate((f) => {
+      for (const kind of Object.keys(COLLECTION) as Kind[]) {
+        const ids = new Set(sels.filter((x) => x.kind === kind).map((x) => x.id));
+        if (ids.size) (f as any)[COLLECTION[kind]] = (f as any)[COLLECTION[kind]].filter((e: { id: string }) => !ids.has(e.id));
+      }
+    });
+    this._wallRoom = undefined;
   }
 
   private _setWallLength(len: number): void {
