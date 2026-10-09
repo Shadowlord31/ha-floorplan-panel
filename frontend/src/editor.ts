@@ -16,6 +16,7 @@ import {
   orthoSnap,
   pointInPolygon,
   projectOnSegment,
+  snapToAreaCorner,
   snapToEndpoint,
   snapToGrid,
 } from "./geometry";
@@ -51,9 +52,16 @@ interface DragState {
   sel?: Selection;
   handle?: string;
   orig?: any;
-  /** Beim Ziehen eines Wandendpunkts mitbewegte Endpunkte anderer Wände. */
-  linked?: { wall: Wall; end: 1 | 2 }[];
+  /** Beim Ziehen mitbewegte Wand-Endpunkte und Raumecken, die auf dem gezogenen Punkt liegen. */
+  links?: Link[];
   viewStart?: View;
+}
+
+interface Link {
+  /** Welcher Endpunkt der gezogenen Wand gemeint ist (0: Raumecke). */
+  end: 0 | 1 | 2;
+  walls: { wall: Wall; end: 1 | 2 }[];
+  verts: Point[];
 }
 
 interface View {
@@ -350,10 +358,12 @@ export class FpEditor extends LitElement {
   }
 
   /** Raster + Endpunktfang (Alt schaltet beides ab). */
-  private _snap(p: Point, ev: { altKey: boolean }, ignore: readonly Wall[] = []): Point {
+  private _snap(p: Point, ev: { altKey: boolean }, ignore: readonly Wall[] = [], ignorePts: readonly Point[] = []): Point {
     if (ev.altKey) return p;
     const ep = snapToEndpoint(p, this._floor.walls, SNAP_PX * this._upp, ignore);
     if (ep) return { ...ep };
+    const corner = snapToAreaCorner(p, this._floor.areas, SNAP_PX * this._upp, ignorePts);
+    if (corner) return corner;
     const g = this._draft.settings.grid;
     return { x: snapToGrid(p.x, g), y: snapToGrid(p.y, g) };
   }
@@ -391,10 +401,20 @@ export class FpEditor extends LitElement {
         if (hit?.kind === "handle" && this._sel) {
           const el = this._findSelected();
           this._drag = { ...base, mode: "handle", sel: this._sel, handle: hit.handle, orig: structuredClone(el) };
-          if (this._sel.kind === "wall" && el) this._drag.linked = this._linkedEnds(el as Wall, hit.handle === "p1" ? 1 : 2);
+          if (this._sel.kind === "wall" && el) {
+            const end = hit.handle === "p1" ? 1 : 2;
+            this._drag.links = [this._linksAt(el as Wall, end)];
+          } else if (this._sel.kind === "area" && el && hit.handle?.startsWith("v")) {
+            const pt = (el as Area).points[Number(hit.handle!.slice(1))];
+            this._drag.links = [this._linksAt(undefined, 0, pt, el as Area)];
+          }
         } else if (hit && hit.kind !== "handle") {
           this._sel = { kind: hit.kind, id: hit.id };
           this._drag = { ...base, mode: "move", sel: this._sel, orig: structuredClone(this._findSelected()) };
+          if (hit.kind === "wall") {
+            const w = this._findSelected() as Wall;
+            this._drag.links = [this._linksAt(w, 1), this._linksAt(w, 2)];
+          }
         } else {
           this._sel = undefined;
           this._drag = { ...base, mode: "pan", viewStart: { ...this._view } };
@@ -471,6 +491,7 @@ export class FpEditor extends LitElement {
       switch (d.sel.kind) {
         case "wall":
           Object.assign(el, { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy });
+          for (const l of d.links ?? []) this._applyLink(l, l.end === 1 ? { x: o.x1 + dx, y: o.y1 + dy } : { x: o.x2 + dx, y: o.y2 + dy });
           break;
         case "area":
           el.points = o.points.map((q: Point) => ({ x: q.x + dx, y: q.y + dy }));
@@ -493,17 +514,18 @@ export class FpEditor extends LitElement {
       if (d.sel.kind === "wall") {
         const end = d.handle === "p1" ? 1 : 2;
         const other = end === 1 ? { x: o.x2, y: o.y2 } : { x: o.x1, y: o.y1 };
-        let np = this._snap(p, ev, [el, ...(d.linked ?? []).map((l) => l.wall)]);
+        const link = d.links?.[0];
+        let np = this._snap(p, ev, [el, ...(link?.walls ?? []).map((l) => l.wall)], link?.verts ?? []);
         if (!ev.shiftKey && !ev.altKey) np = orthoSnap(other, np);
         el[`x${end}`] = np.x;
         el[`y${end}`] = np.y;
-        for (const l of d.linked ?? []) {
-          (l.wall as any)[`x${l.end}`] = np.x;
-          (l.wall as any)[`y${l.end}`] = np.y;
-        }
+        if (link) this._applyLink(link, np);
       } else if (d.sel.kind === "area" && d.handle.startsWith("v")) {
-        const i = Number(d.handle.slice(1));
-        el.points = el.points.map((q: Point, j: number) => (j === i ? this._snap(p, ev) : q));
+        const pt = el.points[Number(d.handle.slice(1))] as Point;
+        const link = d.links?.[0];
+        const np = this._snap(p, ev, link?.walls.map((l) => l.wall) ?? [], [pt, ...(link?.verts ?? [])]);
+        Object.assign(pt, np);
+        if (link) this._applyLink(link, np);
       }
     }
     this._draft = { ...this._draft };
@@ -606,16 +628,28 @@ export class FpEditor extends LitElement {
     }
   }
 
-  /** Endpunkte anderer Wände, die genau auf dem gezogenen Endpunkt liegen. */
-  private _linkedEnds(wall: Wall, end: 1 | 2): { wall: Wall; end: 1 | 2 }[] {
-    const p = end === 1 ? { x: wall.x1, y: wall.y1 } : { x: wall.x2, y: wall.y2 };
-    const out: { wall: Wall; end: 1 | 2 }[] = [];
+  /** Wand-Endpunkte und Raumecken, die genau auf dem Punkt liegen (Endpunkt `end` von `wall` bzw. `pt` einer Raumecke). */
+  private _linksAt(wall: Wall | undefined, end: 0 | 1 | 2, pt?: Point, area?: Area): Link {
+    const p = pt ?? (end === 1 ? { x: wall!.x1, y: wall!.y1 } : { x: wall!.x2, y: wall!.y2 });
+    const walls: Link["walls"] = [];
     for (const w of this._floor.walls) {
       if (w === wall) continue;
-      if (distance(p, { x: w.x1, y: w.y1 }) < 0.5) out.push({ wall: w, end: 1 });
-      if (distance(p, { x: w.x2, y: w.y2 }) < 0.5) out.push({ wall: w, end: 2 });
+      if (distance(p, { x: w.x1, y: w.y1 }) < 0.5) walls.push({ wall: w, end: 1 });
+      if (distance(p, { x: w.x2, y: w.y2 }) < 0.5) walls.push({ wall: w, end: 2 });
     }
-    return out;
+    const verts: Point[] = [];
+    for (const a of this._floor.areas) {
+      for (const q of a.points) if (q !== pt && a !== area && distance(p, q) < 0.5) verts.push(q);
+    }
+    return { end, walls, verts };
+  }
+
+  private _applyLink(l: Link, np: Point): void {
+    for (const w of l.walls) {
+      (w.wall as any)[`x${w.end}`] = np.x;
+      (w.wall as any)[`y${w.end}`] = np.y;
+    }
+    for (const q of l.verts) Object.assign(q, np);
   }
 
   private _placeOpening(type: "door" | "window", p: Point, ev: PointerEvent): void {

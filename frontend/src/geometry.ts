@@ -178,6 +178,28 @@ export function snapToEndpoint(
   return best;
 }
 
+/** Fängt `p` auf eine Ecke eines Raums innerhalb `maxDist`; `ignore` sind Eckpunkt-Objekte, die übersprungen werden. */
+export function snapToAreaCorner(
+  p: Point,
+  areas: readonly Area[],
+  maxDist: number,
+  ignore: readonly Point[] = []
+): Point | undefined {
+  let best: Point | undefined;
+  let bestD = maxDist;
+  for (const a of areas) {
+    for (const q of a.points) {
+      if (ignore.includes(q)) continue;
+      const d = distance(p, q);
+      if (d <= bestD) {
+        best = q;
+        bestD = d;
+      }
+    }
+  }
+  return best && { x: best.x, y: best.y };
+}
+
 /** Hält eine Linie von `from` nach `to` waagrecht/senkrecht, wenn sie fast so verläuft. */
 export function orthoSnap(from: Point, to: Point, toleranceDeg = 8): Point {
   const angle = Math.abs((Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI);

@@ -8,6 +8,7 @@ import {
   orthoSnap,
   pointInPolygon,
   resolveAreaZoom,
+  snapToAreaCorner,
   snapToEndpoint,
 } from "./geometry";
 import type { Area, FloorItem, Wall } from "./types";
@@ -100,6 +101,13 @@ describe("Fang", () => {
   it("fängt Endpunkte und ignoriert die gezogene Wand", () => {
     expect(snapToEndpoint({ x: 98, y: 3 }, walls, 5)).toEqual({ x: 100, y: 0 });
     expect(snapToEndpoint({ x: 98, y: 3 }, walls, 5, walls)).toBeUndefined();
+  });
+
+  it("fängt Raumecken und überspringt ignorierte Punkte", () => {
+    const area = { id: "r", name: "", sidebar: [], points: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }] };
+    expect(snapToAreaCorner({ x: 197, y: 2 }, [area], 5)).toEqual({ x: 200, y: 0 });
+    expect(snapToAreaCorner({ x: 197, y: 2 }, [area], 5, [area.points[1]])).toBeUndefined();
+    expect(snapToAreaCorner({ x: 150, y: 50 }, [area], 5)).toBeUndefined();
   });
 
   it("richtet fast waagrechte Linien aus", () => {
