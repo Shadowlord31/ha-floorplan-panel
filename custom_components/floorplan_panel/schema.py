@@ -135,6 +135,8 @@ SIDEBAR_ENTRY_SCHEMA = vol.Schema(
     extra=vol.REMOVE_EXTRA,
 )
 
+AREA_TYPES = ("room", "balcony", "hallway", "staircase", "bathroom", "custom")
+
 AREA_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -144,6 +146,9 @@ AREA_SCHEMA = vol.Schema(
         ),
         vol.Optional("name", default=""): _NAME,
         vol.Optional("showName", default=True): bool,
+        # Art des Raums; "balcony" wird als Außenbereich (gestrichelte Kontur) dargestellt
+        vol.Optional("type"): vol.In(AREA_TYPES),
+        vol.Optional("typeLabel"): _NAME,
         vol.Optional("color"): _COLOR,
         vol.Optional("opacity"): _OPACITY,
         # nur als Bezug/Namensvorschlag – es werden KEINE Entitäten automatisch übernommen

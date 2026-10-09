@@ -22,7 +22,7 @@ import {
 import { domainOf, entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
 import { glowEnabled, glowReach, openingPassesLight, wallsLightPassesThrough } from "./light";
 import { maxWallThickness, planSvgStyles, renderArea, renderOpening, renderWalls, wallThickness } from "./render";
-import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, type Area, type Floor, type FloorItem, type Leaf, type Opening, type Plan, type Point, type Shutter, type ShutterSide, type Wall, MAX_LEAVES } from "./types";
+import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, AREA_TYPES, type Area, type Floor, type FloorItem, type Leaf, type Opening, type Plan, type Point, type Shutter, type ShutterSide, type Wall, MAX_LEAVES } from "./types";
 import { leafSegments, setLeafCount, setLeafWidth, windowLeaves, windowMissingSensor } from "./openings";
 
 const DOMAIN = "floorplan_panel";
@@ -1157,6 +1157,13 @@ export class FpEditor extends LitElement {
     const suggestions = this._areaSuggestions(a);
     return html`
       ${this._text("Name", "name", a.name)}
+      <label class="field">
+        <span>Art</span>
+        <select @change=${(ev: Event) => this._setProp("type", (ev.target as HTMLSelectElement).value)}>
+          ${AREA_TYPES.map(([v, l]) => html`<option value=${v} ?selected=${(a.type ?? "room") === v}>${l}</option>`)}
+        </select>
+      </label>
+      ${a.type === "custom" ? this._text("Bezeichnung", "typeLabel", a.typeLabel) : nothing}
       <div class="grid2">
         ${this._color("Farbe", "color", a.color, "#4f8bd6")}
         <label class="field">

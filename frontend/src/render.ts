@@ -46,7 +46,8 @@ export function renderArea(
   const anchor = pointInPolygon(area.points, minX + opts.labelSize * 0.8, minY + opts.labelSize * 1.5) ? "start" : "middle";
   return svg`
     <g class="area ${opts.selected ? "selected" : ""} ${opts.dimmed ? "dimmed" : ""}" data-id=${area.id}>
-      <polygon points=${pts} fill=${color} fill-opacity=${opacity}></polygon>
+      <polygon points=${pts} fill=${color} fill-opacity=${opacity}
+        style=${area.type === "balcony" ? `stroke:${color};stroke-width:3;stroke-dasharray:10 6;stroke-linejoin:round` : nothing}></polygon>
       ${
         area.showName !== false && area.name
           ? svg`<text class="area-label" x=${label.x} y=${label.y} font-size=${opts.labelSize}

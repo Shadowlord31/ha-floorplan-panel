@@ -35,6 +35,7 @@ spiegelt die Typen in `frontend/src/types.ts`.
       "areas": [{
         "id": "wohnzimmer", "name": "Wohnzimmer",
         "points": [{ "x": 50, "y": 50 }, { "x": 550, "y": 50 }, { "x": 550, "y": 400 }, { "x": 50, "y": 400 }],
+        "type": "room",                  // room, balcony (gestrichelte Kontur), hallway, staircase, bathroom, custom (+ "typeLabel")
         "color": "#4f8bd6", "opacity": 0.12, "zoom": null,
         "haArea": "wohnzimmer",          // nur Bezug/Vorschläge – keine Automatik
         "entity": "binary_sensor.praesenz_wz", "activeColor": "#ffc107",

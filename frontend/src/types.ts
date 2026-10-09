@@ -77,12 +77,26 @@ export interface SidebarEntry {
   icon?: string;
 }
 
+export const AREA_TYPES = [
+  ["room", "Zimmer"],
+  ["balcony", "Balkon"],
+  ["hallway", "Flur"],
+  ["staircase", "Treppenhaus"],
+  ["bathroom", "Bad"],
+  ["custom", "Eigene Bezeichnung"],
+] as const;
+export type AreaType = (typeof AREA_TYPES)[number][0];
+
 /** Ein Raum: geschlossenes Polygon mit eigener Seitenleiste. */
 export interface Area {
   id: string;
   name: string;
   points: Point[];
   showName?: boolean;
+  /** Art des Raums; "balcony" ist ein Außenbereich (gestrichelte Kontur). */
+  type?: AreaType;
+  /** Freies Label bei type "custom". */
+  typeLabel?: string;
   color?: string;
   opacity?: number;
   /** Nur Bezug/Namensvorschlag – es werden keine Entitäten automatisch übernommen. */
