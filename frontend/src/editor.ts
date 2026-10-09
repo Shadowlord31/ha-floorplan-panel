@@ -29,10 +29,11 @@ const DOMAIN = "floorplan_panel";
 const UNDO_LIMIT = 100;
 /** Fangradius in Bildschirmpixeln. */
 const SNAP_PX = 12;
+const samePoint = (x: number, y: number, p: Point) => Math.abs(x - p.x) < 0.5 && Math.abs(y - p.y) < 0.5;
 const ITEM_RADIUS_PX = 14;
 const HANDLE_RADIUS_PX = 7;
 
-type Tool = "select" | "wall" | "area" | "door" | "window" | "item";
+type Tool = "select" | "wall" | "area" | "rect" | "door" | "window" | "item";
 type Kind = "wall" | "opening" | "area" | "item";
 interface Selection {
   kind: Kind;
@@ -40,7 +41,7 @@ interface Selection {
 }
 
 interface DragState {
-  mode: "move" | "handle" | "pan";
+  mode: "move" | "handle" | "pan" | "rect";
   pointerId: number;
   start: Point;
   screenStart: Point;
@@ -66,6 +67,7 @@ const TOOLS: { id: Tool; icon: string; label: string; hint: string }[] = [
   { id: "select", icon: "mdi:cursor-default-outline", label: "Auswahl", hint: "Element anklicken zum Bearbeiten, ziehen zum Verschieben. Leere Fläche ziehen verschiebt die Ansicht, Mausrad zoomt." },
   { id: "wall", icon: "mdi:wall", label: "Wand", hint: "Klick setzt Anfang, weitere Klicks setzen Wandstücke. Esc oder Doppelklick beendet. Umschalt: freier Winkel, Alt: ohne Raster." },
   { id: "area", icon: "mdi:vector-polygon", label: "Raum", hint: "Ecken nacheinander anklicken, zum Schließen den ersten Punkt anklicken oder Enter drücken. Esc bricht ab." },
+  { id: "rect", icon: "mdi:vector-rectangle", label: "Raum (Rechteck)", hint: "Von Ecke zu Ecke ziehen: legt Raumfläche und die vier Wände in einem Zug an. Alt: ohne Raster/Fang, Esc bricht ab." },
   { id: "door", icon: "mdi:door", label: "Tür", hint: "Auf eine Wand klicken, um dort eine Tür einzusetzen." },
   { id: "window", icon: "mdi:window-closed-variant", label: "Fenster", hint: "Auf eine Wand klicken, um dort ein Fenster einzusetzen." },
   { id: "item", icon: "mdi:map-marker-plus", label: "Icon", hint: "Klick platziert ein freies Icon – Icon und Entität danach rechts wählen." },
@@ -423,6 +425,11 @@ export class FpEditor extends LitElement {
         }
         break;
       }
+      case "rect": {
+        this._drag = { ...base, mode: "rect", start: this._snap(p, ev) };
+        this._svg.setPointerCapture(ev.pointerId);
+        break;
+      }
       case "door":
       case "window":
         this._placeOpening(this._tool, p, ev);
@@ -507,6 +514,10 @@ export class FpEditor extends LitElement {
     if (!d || d.pointerId !== ev.pointerId) return;
     this._drag = undefined;
     if (this._svg.hasPointerCapture(ev.pointerId)) this._svg.releasePointerCapture(ev.pointerId);
+    if (d.mode === "rect") {
+      this._finishRect(d.start, this._snap(this._toPlan(ev), ev));
+      return;
+    }
     if (d.moved && d.mode !== "pan") this._pushUndo(d.before);
   }
 
@@ -580,7 +591,10 @@ export class FpEditor extends LitElement {
     }
     if (typing) return;
     if (ev.key === "Escape") {
-      if (this._chainStart) this._chainStart = undefined;
+      if (this._drag?.mode === "rect") {
+        if (this._svg.hasPointerCapture(this._drag.pointerId)) this._svg.releasePointerCapture(this._drag.pointerId);
+        this._drag = undefined;
+      } else if (this._chainStart) this._chainStart = undefined;
       else if (this._roomPoints.length) this._roomPoints = [];
       else if (this._tool !== "select") this._tool = "select";
       else this._sel = undefined;
@@ -624,6 +638,34 @@ export class FpEditor extends LitElement {
       f.areas.push({ id, name: `Raum ${n + 1}`, points, color: ROOM_COLORS[n % ROOM_COLORS.length], sidebar: [] })
     );
     this._roomPoints = [];
+    this._sel = { kind: "area", id };
+    this._tool = "select";
+  }
+
+  private _finishRect(a: Point, b: Point): void {
+    const x1 = Math.min(a.x, b.x);
+    const x2 = Math.max(a.x, b.x);
+    const y1 = Math.min(a.y, b.y);
+    const y2 = Math.max(a.y, b.y);
+    if (x2 - x1 < 1 || y2 - y1 < 1) return;
+    const corners: Point[] = [
+      { x: x1, y: y1 },
+      { x: x2, y: y1 },
+      { x: x2, y: y2 },
+      { x: x1, y: y2 },
+    ];
+    const id = newId("r");
+    const n = this._floor.areas.length;
+    this._mutate((f) => {
+      corners.forEach((c, i) => {
+        const d = corners[(i + 1) % 4];
+        const exists = f.walls.some(
+          (w) => (samePoint(w.x1, w.y1, c) && samePoint(w.x2, w.y2, d)) || (samePoint(w.x1, w.y1, d) && samePoint(w.x2, w.y2, c))
+        );
+        if (!exists) f.walls.push({ id: newId("w"), x1: c.x, y1: c.y, x2: d.x, y2: d.y });
+      });
+      f.areas.push({ id, name: `Raum ${n + 1}`, points: corners, color: ROOM_COLORS[n % ROOM_COLORS.length], sidebar: [] });
+    });
     this._sel = { kind: "area", id };
     this._tool = "select";
   }
@@ -828,6 +870,19 @@ export class FpEditor extends LitElement {
         <line class="preview-wall" x1=${this._chainStart.x} y1=${this._chainStart.y} x2=${end.x} y2=${end.y}
               stroke-width=${this._draft.settings.wallThickness}></line>
         ${this._lengthLabel(this._chainStart, end, upp)}`;
+    }
+    if (this._tool === "rect") {
+      const sp = this._snap(c, fake);
+      const d = this._drag;
+      if (d?.mode !== "rect") return svg`<circle class="cursor-dot" cx=${sp.x} cy=${sp.y} r=${4 * upp}></circle>`;
+      const x = Math.min(d.start.x, sp.x);
+      const y = Math.min(d.start.y, sp.y);
+      const w = Math.abs(sp.x - d.start.x);
+      const h = Math.abs(sp.y - d.start.y);
+      return svg`
+        <rect class="preview-area" x=${x} y=${y} width=${w} height=${h} stroke-width=${2 * upp}></rect>
+        ${w > 1 ? this._lengthLabel({ x, y }, { x: x + w, y }, upp) : nothing}
+        ${h > 1 ? this._lengthLabel({ x: x + w, y }, { x: x + w, y: y + h }, upp) : nothing}`;
     }
     if (this._tool === "area") {
       const sp = this._snap(c, fake);
