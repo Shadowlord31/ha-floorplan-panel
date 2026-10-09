@@ -39,7 +39,6 @@ const UNDO_LIMIT = 100;
 /** Fangradius in Bildschirmpixeln. */
 const GRID_CHOICES = [1, 5, 10, 25, 50];
 const SNAP_PX = 12;
-const samePoint = (x: number, y: number, p: Point) => Math.abs(x - p.x) < 0.5 && Math.abs(y - p.y) < 0.5;
 const ITEM_RADIUS_PX = 14;
 const HANDLE_RADIUS_PX = 7;
 
