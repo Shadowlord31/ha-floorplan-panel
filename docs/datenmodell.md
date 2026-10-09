@@ -10,7 +10,8 @@ spiegelt die Typen in `frontend/src/types.ts`.
 {
   "version": 1,
   "canvas": { "width": 1000, "height": 700 },     // virtuelle Einheiten, z. B. cm
-  "settings": { "wallThickness": 12, "grid": 10 },
+  "settings": { "wallThickness": 12, "grid": 10,   // grid: 1, 5, 10, 25 oder 50 im Editor
+                "templates": [{ "id": "v1", "name": "Kinderzimmer", "walls": [], "openings": [], "areas": [], "items": [] }] },  // optional, max. 30 Vorlagen
   "floors": [
     {
       "id": "wohnung", "name": "Wohnung",

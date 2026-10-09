@@ -260,3 +260,110 @@ export function contentBounds(floor: Floor, plan: Plan): Rect {
   const pad = Math.max(maxX - minX, maxY - minY) * 0.03;
   return { x: minX - pad, y: minY - pad, w: maxX - minX + 2 * pad, h: maxY - minY + 2 * pad };
 }
+
+export interface Guide {
+  axis: "x" | "y";
+  value: number;
+  ref: Point;
+}
+
+/** Richtet p an X-/Y-Koordinaten anderer Punkte aus (pro Achse unabhängig). */
+export function alignSnap(p: Point, refs: readonly Point[], maxDist: number): { x?: number; y?: number; guides: Guide[] } {
+  let bx: Point | undefined;
+  let by: Point | undefined;
+  let dx = maxDist;
+  let dy = maxDist;
+  for (const r of refs) {
+    const ax = Math.abs(r.x - p.x);
+    if (ax <= dx) {
+      dx = ax;
+      bx = r;
+    }
+    const ay = Math.abs(r.y - p.y);
+    if (ay <= dy) {
+      dy = ay;
+      by = r;
+    }
+  }
+  const guides: Guide[] = [];
+  if (bx) guides.push({ axis: "x", value: bx.x, ref: bx });
+  if (by) guides.push({ axis: "y", value: by.y, ref: by });
+  return { x: bx?.x, y: by?.y, guides };
+}
+
+/** Achsparalleles Rechteck aus genau 4 Punkten, sonst undefined. */
+export function axisRect(points: readonly Point[]): Rect | undefined {
+  if (points.length !== 4) return undefined;
+  const xs = [...new Set(points.map((p) => p.x))];
+  const ys = [...new Set(points.map((p) => p.y))];
+  if (xs.length !== 2 || ys.length !== 2) return undefined;
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.abs(xs[0] - xs[1]), h: Math.abs(ys[0] - ys[1]) };
+}
+
+function distToPolygonEdge(poly: readonly Point[], p: Point): number {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    best = Math.min(best, distance(p, projectOnSegment(p, a, b).point));
+  }
+  return best;
+}
+
+export interface PlaceRequest {
+  light: boolean;
+}
+
+/**
+ * Verteilt Icons deterministisch im Polygon: Lichter Richtung Mitte, andere Geräte Richtung Wand,
+ * mit Mindestabstand zueinander, zu `existing` und zur Raumbeschriftung `label`.
+ */
+export function autoPlace(
+  poly: readonly Point[],
+  requests: readonly PlaceRequest[],
+  existing: readonly Point[] = [],
+  label?: Point,
+  minGap = 40,
+  edgeMargin = 20
+): Point[] {
+  if (poly.length < 3) return requests.map(() => ({ x: 0, y: 0 }));
+  const center = polygonCentroid(poly);
+  const xs = poly.map((p) => p.x);
+  const ys = poly.map((p) => p.y);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const y0 = Math.min(...ys);
+  const y1 = Math.max(...ys);
+  const step = Math.max(5, Math.min(x1 - x0, y1 - y0) / 40);
+  const cands: Point[] = [];
+  for (let y = y0 + step / 2; y < y1; y += step) {
+    for (let x = x0 + step / 2; x < x1; x += step) {
+      const c = { x: Math.round(x), y: Math.round(y) };
+      if (pointInPolygon(poly, c.x, c.y)) cands.push(c);
+    }
+  }
+  const placed: Point[] = [...existing];
+  const out: Point[] = [];
+  for (const req of requests) {
+    let found: Point | undefined;
+    for (const factor of [1, 0.6, 0.3]) {
+      let bestScore = Infinity;
+      for (const c of cands) {
+        const edge = distToPolygonEdge(poly, c);
+        if (edge < edgeMargin * factor) continue;
+        if (placed.some((q) => distance(c, q) < minGap * factor)) continue;
+        if (label && distance(c, label) < minGap * 1.5 * factor) continue;
+        const score = req.light ? distance(c, center) : edge;
+        if (score < bestScore) {
+          bestScore = score;
+          found = c;
+        }
+      }
+      if (found) break;
+    }
+    const pt = found ?? center;
+    placed.push(pt);
+    out.push({ x: pt.x, y: pt.y });
+  }
+  return out;
+}

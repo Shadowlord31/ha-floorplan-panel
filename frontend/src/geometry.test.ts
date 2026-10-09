@@ -162,3 +162,33 @@ describe("contentBounds", () => {
     expect(b.x + b.w).toBeGreaterThan(10 + 100);
   });
 });
+
+import { alignSnap, autoPlace, axisRect } from "./geometry";
+
+describe("Ausrichtung und Platzierung", () => {
+  it("richtet pro Achse an Referenzpunkten aus", () => {
+    const r = alignSnap({ x: 103, y: 50 }, [{ x: 100, y: 0 }, { x: 300, y: 48 }], 5);
+    expect(r.x).toBe(100);
+    expect(r.y).toBe(48);
+    expect(r.guides).toHaveLength(2);
+    expect(alignSnap({ x: 150, y: 150 }, [{ x: 100, y: 0 }], 5)).toEqual({ x: undefined, y: undefined, guides: [] });
+  });
+
+  it("erkennt achsparallele Rechtecke", () => {
+    expect(axisRect(rect(10, 20, 110, 70))).toEqual({ x: 10, y: 20, w: 100, h: 50 });
+    expect(axisRect([{ x: 0, y: 0 }, { x: 100, y: 10 }, { x: 100, y: 100 }, { x: 0, y: 100 }])).toBeUndefined();
+    expect(axisRect([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 10 }])).toBeUndefined();
+  });
+
+  it("platziert deterministisch, im Raum und mit Abstand", () => {
+    const poly = rect(0, 0, 400, 300);
+    const reqs = [{ light: true }, { light: false }, { light: false }, { light: true }];
+    const a = autoPlace(poly, reqs, [], { x: 200, y: 150 });
+    expect(autoPlace(poly, reqs, [], { x: 200, y: 150 })).toEqual(a);
+    for (const p of a) expect(pointInPolygon(poly, p.x, p.y)).toBe(true);
+    for (let i = 0; i < a.length; i++)
+      for (let j = i + 1; j < a.length; j++) expect(Math.hypot(a[i].x - a[j].x, a[i].y - a[j].y)).toBeGreaterThanOrEqual(40);
+    expect(Math.hypot(a[0].x - 200, a[0].y - 150)).toBeGreaterThanOrEqual(60);
+    expect(Math.min(a[1].x, 400 - a[1].x, a[1].y, 300 - a[1].y)).toBeLessThan(60);
+  });
+});

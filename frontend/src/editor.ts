@@ -10,15 +10,20 @@ import { LitElement, css, html, nothing, svg, unsafeCSS, type PropertyValues, ty
 import { property, query, state } from "lit/decorators.js";
 import "./entity-picker";
 import {
+  alignSnap,
+  autoPlace,
+  axisRect,
   contentBounds,
   distance,
   nearestWall,
   orthoSnap,
   pointInPolygon,
+  polygonCentroid,
   projectOnSegment,
   snapToAreaCorner,
   snapToEndpoint,
   snapToGrid,
+  type Guide,
   type Rect,
 } from "./geometry";
 import { domainOf, entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
@@ -30,6 +35,7 @@ import { leafSegments, setLeafCount, setLeafWidth, windowLeaves, windowMissingSe
 const DOMAIN = "floorplan_panel";
 const UNDO_LIMIT = 100;
 /** Fangradius in Bildschirmpixeln. */
+const GRID_CHOICES = [1, 5, 10, 25, 50];
 const SNAP_PX = 12;
 const samePoint = (x: number, y: number, p: Point) => Math.abs(x - p.x) < 0.5 && Math.abs(y - p.y) < 0.5;
 const ITEM_RADIUS_PX = 14;
@@ -147,6 +153,8 @@ export class FpEditor extends LitElement {
   /** Mehrfachauswahl (inkl. `_sel`), nur gültig bei mehr als einem Element. */
   @state() private _multi: Selection[] = [];
   @state() private _marquee?: { a: Point; b: Point };
+  @state() private _guides: Guide[] = [];
+  private _lastGuides: Guide[] = [];
   @state() private _menu?: { x: number; y: number };
   private _lpTimer?: number;
   @state() private _leafSel?: number;
@@ -595,8 +603,20 @@ export class FpEditor extends LitElement {
     if (ep) return { ...ep };
     const corner = snapToAreaCorner(p, this._floor.areas, SNAP_PX * this._upp, ignorePts);
     if (corner) return corner;
+    const refs: Point[] = [];
+    for (const w of this._floor.walls) {
+      if (ignore.includes(w)) continue;
+      refs.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+    }
+    for (const a of this._floor.areas) for (const q of a.points) if (!ignorePts.includes(q)) refs.push(q);
+    const al = alignSnap(p, refs, SNAP_PX * this._upp);
+    this._lastGuides = al.guides;
     const g = this._draft.settings.grid;
-    return { x: snapToGrid(p.x, g), y: snapToGrid(p.y, g) };
+    return { x: al.x ?? snapToGrid(p.x, g), y: al.y ?? snapToGrid(p.y, g) };
+  }
+
+  private _setGuides(g: Guide[]): void {
+    if (JSON.stringify(g) !== JSON.stringify(this._guides)) this._guides = g;
   }
 
   private _hit(ev: Event): { kind: Kind | "handle"; id: string; handle?: string } | undefined {
@@ -733,6 +753,13 @@ export class FpEditor extends LitElement {
   }
 
   private _onPointerMove(ev: PointerEvent): void {
+    this._lastGuides = [];
+    this._onPointerMoveInner(ev);
+    if (!this._drag && this._cursor && ["wall", "rect", "area", "item"].includes(this._tool)) this._snap(this._cursor, ev);
+    this._setGuides(this._lastGuides);
+  }
+
+  private _onPointerMoveInner(ev: PointerEvent): void {
     const p = this._toPlan(ev);
     this._cursor = p;
     const d = this._drag;
@@ -816,6 +843,7 @@ export class FpEditor extends LitElement {
 
   private _onPointerUp(ev: PointerEvent): void {
     window.clearTimeout(this._lpTimer);
+    this._setGuides([]);
     const d = this._drag;
     if (!d || d.pointerId !== ev.pointerId) return;
     this._drag = undefined;
@@ -1148,6 +1176,7 @@ export class FpEditor extends LitElement {
       <g class="items">${floor.items.map((it) => this._renderItem(it, upp))}</g>
       ${this._renderSelectionOverlay(upp)}
       ${this._renderDrawPreview(upp)}
+      ${this._renderGuides(upp)}
     `;
   }
 
@@ -1165,6 +1194,15 @@ export class FpEditor extends LitElement {
         </foreignObject>
         ${it.label ? svg`<text x=${it.x} y=${it.y + r + 12 * upp} font-size=${11 * upp} text-anchor="middle" class="item-label">${it.label}</text>` : nothing}
       </g>`;
+  }
+
+  private _renderGuides(upp: number) {
+    const v = this._view;
+    return svg`${this._guides.map((g) =>
+      g.axis === "x"
+        ? svg`<line class="guide" x1=${g.value} x2=${g.value} y1=${v.y} y2=${v.y + v.h} stroke-width=${upp}></line><circle class="guide-dot" cx=${g.ref.x} cy=${g.ref.y} r=${5 * upp}></circle>`
+        : svg`<line class="guide" y1=${g.value} y2=${g.value} x1=${v.x} x2=${v.x + v.w} stroke-width=${upp}></line><circle class="guide-dot" cx=${g.ref.x} cy=${g.ref.y} r=${5 * upp}></circle>`
+    )}`;
   }
 
   private _renderSelectionOverlay(upp: number) {
@@ -1369,8 +1407,52 @@ export class FpEditor extends LitElement {
         ${this._num("x1", "x1", w.x1)} ${this._num("y1", "y1", w.y1)} ${this._num("x2", "x2", w.x2)} ${this._num("y2", "y2", w.y2)}
       </div>
       ${this._num("Stärke", "thickness", w.thickness, { min: 1, max: 100, placeholder: `Standard (${this._draft.settings.wallThickness})` })}
-      <p class="muted">Länge: ${formatLength(distance({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }))}. Endpunkte ziehen ändert die Wand; verbundene Wände ziehen mit.</p>
+      <label class="field">
+        <span>Länge</span>
+        <input type="number" min="1" step="1" .value=${String(round(distance({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 })))}
+               @change=${(ev: Event) => this._setWallLength(Number((ev.target as HTMLInputElement).value))} />
+      </label>
+      <p class="muted">Länge ändern verschiebt den zweiten Endpunkt; verbundene Wände ziehen mit.</p>
     `;
+  }
+
+  private _setWallLength(len: number): void {
+    const w = this._findSelected() as Wall | undefined;
+    if (!w || !Number.isFinite(len) || len < 1) return;
+    const cur = distance({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+    if (cur < 0.01) return;
+    this._mutate(() => {
+      const link = this._linksAt(w, 2);
+      const k = len / cur;
+      const np = { x: round(w.x1 + (w.x2 - w.x1) * k), y: round(w.y1 + (w.y2 - w.y1) * k) };
+      w.x2 = np.x;
+      w.y2 = np.y;
+      this._applyLink(link, np);
+    });
+  }
+
+  private _setRectSize(a: Area, width: number, height: number): void {
+    const r = axisRect(a.points);
+    if (!r || !(width >= 1) || !(height >= 1)) return;
+    this._mutate(() => {
+      const links = a.points.map((pt) => this._linksAt(undefined, 0, pt, a));
+      a.points.forEach((pt, i) => {
+        const np = { x: pt.x === r.x ? r.x : r.x + width, y: pt.y === r.y ? r.y : r.y + height };
+        Object.assign(pt, np);
+        this._applyLink(links[i], np);
+      });
+    });
+  }
+
+  private _autoPlaceIcons(a: Area): void {
+    const have = new Set(this._floor.items.map((i) => i.entity).filter(Boolean));
+    const todo = a.sidebar.map((s) => s.entity).filter((e) => !have.has(e));
+    if (!todo.length) return;
+    const existing = this._floor.items.filter((i) => pointInPolygon(a.points, i.x, i.y)).map((i) => ({ x: i.x, y: i.y }));
+    const pts = autoPlace(a.points, todo.map((e) => ({ light: domainOf(e) === "light" })), existing, polygonCentroid(a.points));
+    this._mutate((f) => {
+      todo.forEach((entity, i) => f.items.push({ id: newId("i"), x: pts[i].x, y: pts[i].y, entity, icon: entityIcon(this.hass, entity), tapAction: "auto" }));
+    });
   }
 
   private _renderOpeningProps(o: Opening) {
@@ -1552,6 +1634,15 @@ export class FpEditor extends LitElement {
                  @change=${(ev: Event) => this._setProp("opacity", Number((ev.target as HTMLInputElement).value))} />
         </label>
       </div>
+      ${(() => {
+        const r = axisRect(a.points);
+        return r
+          ? html`<div class="grid2">
+              <label class="field"><span>Breite</span><input type="number" min="1" .value=${String(round(r.w))} @change=${(ev: Event) => this._setRectSize(a, Number((ev.target as HTMLInputElement).value), r.h)} /></label>
+              <label class="field"><span>Höhe</span><input type="number" min="1" .value=${String(round(r.h))} @change=${(ev: Event) => this._setRectSize(a, r.w, Number((ev.target as HTMLInputElement).value))} /></label>
+            </div>`
+          : nothing;
+      })()}
       ${this._check("Name im Plan anzeigen", "showName", a.showName !== false)}
       ${this._num("Zoom beim Antippen", "zoom", a.zoom ?? undefined, { min: 1, max: 10, step: 0.25, placeholder: "automatisch einpassen" })}
       <details>
@@ -1600,6 +1691,11 @@ export class FpEditor extends LitElement {
           </div>`
         )}
       </div>
+      ${a.sidebar.length
+        ? html`<button class="chip" title="Fehlende Icons für die Seitenleisten-Geräte im Raum verteilen" @click=${() => this._autoPlaceIcons(a)}>
+            <ha-icon icon="mdi:auto-fix"></ha-icon>Icons automatisch platzieren
+          </button>`
+        : nothing}
       <fp-entity-picker
         .hass=${this.hass}
         .exclude=${a.sidebar.map((e) => e.entity)}
@@ -1751,7 +1847,14 @@ export class FpEditor extends LitElement {
       </label>
       <div class="grid2">
         ${this._planNum("Wandstärke", plan.settings.wallThickness, (v) => (plan.settings.wallThickness = v), 1)}
-        ${this._planNum("Raster", plan.settings.grid, (v) => (plan.settings.grid = v), 1)}
+        <label class="field">
+          <span>Raster</span>
+          <select @change=${(ev: Event) => this._mutate(() => (plan.settings.grid = Number((ev.target as HTMLSelectElement).value)))}>
+            ${(GRID_CHOICES.includes(plan.settings.grid) ? GRID_CHOICES : [...GRID_CHOICES, plan.settings.grid].sort((x, y) => x - y)).map(
+              (g) => html`<option value=${g} ?selected=${g === plan.settings.grid}>${g}</option>`
+            )}
+          </select>
+        </label>
       </div>
       <p class="muted">Die Zeichenfläche ist unbegrenzt. Einheiten frei wählbar – Zentimeter bieten sich an (1000 = 10 m).</p>
       <p class="muted">
@@ -2077,6 +2180,18 @@ export class FpEditor extends LitElement {
         fill: none;
         stroke: var(--primary-color);
         stroke-dasharray: 6 4;
+        pointer-events: none;
+      }
+      .guide {
+        stroke: #e91e63;
+        stroke-dasharray: 8 5;
+        pointer-events: none;
+      }
+      .guide-dot {
+        fill: none;
+        stroke: #e91e63;
+        stroke-width: 2;
+        vector-effect: non-scaling-stroke;
         pointer-events: none;
       }
       .marquee {
