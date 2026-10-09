@@ -26,16 +26,40 @@ und Zoom-Logik an [easy-floorplan](https://github.com/Vombato/easy-floorplan) �
 
 ## Installation
 
-**HACS (benutzerdefiniertes Repository):** HACS → Benutzerdefinierte Repositories →
-`https://github.com/Shadowlord31/ha-floorplan-panel`, Typ *Integration* → installieren →
-Home Assistant neu starten → *Einstellungen → Geräte & Dienste → Integration hinzufügen →
-Floorplan Panel*.
+Voraussetzung: Home Assistant 2024.7 oder neuer.
 
-**Manuell:** `custom_components/floorplan_panel` nach `config/custom_components/` kopieren,
-neu starten, Integration hinzufügen.
+### Über HACS (empfohlen)
 
-Danach erscheint in der Seitenleiste der Eintrag **Grundriss**. Ist noch nichts gezeichnet,
-kann im Panel ein frei erfundener Beispiel-Grundriss geladen werden.
+1. In Home Assistant **HACS** öffnen → Menü (drei Punkte oben rechts) → **Benutzerdefinierte Repositories**.
+2. Repository `https://github.com/Shadowlord31/ha-floorplan-panel` eintragen, Typ **Integration**, hinzufügen.
+3. **Floorplan Panel** in HACS suchen und **Herunterladen** (neueste Version).
+4. Home Assistant **neu starten** (*Einstellungen → System → Neu starten*).
+5. *Einstellungen → Geräte & Dienste → Integration hinzufügen → Floorplan Panel* wählen und bestätigen.
+6. In der Seitenleiste erscheint der Eintrag **Grundriss**.
+
+### Manuell
+
+1. Den Ordner `custom_components/floorplan_panel` aus diesem Repository nach
+   `config/custom_components/floorplan_panel` kopieren.
+2. Home Assistant neu starten.
+3. Integration wie oben unter Punkt 5 hinzufügen.
+
+### Aktualisieren
+
+In HACS die neue Version herunterladen, Home Assistant **neu starten** und die Seite im
+Browser hart neu laden (Strg+F5), damit das neue Panel geladen wird. Der gespeicherte
+Grundriss bleibt erhalten.
+
+### Erste Schritte
+
+- Ist noch nichts gezeichnet, bietet das Panel an, einen **Beispiel-Grundriss** zu laden
+  (frei erfunden, zum Ausprobieren).
+- Mit dem Stift-Symbol oben rechts öffnet sich der **Editor** (nur für Administratoren):
+  Wände, Räume, Türen, Fenster und Icons zeichnen, Entitäten zuordnen, speichern.
+  Die Zeichenfläche ist unbegrenzt; „Einpassen“ zeigt den ganzen Plan.
+- Pro Raum legen Sie fest, welche Geräte, Szenen und Skripte im Popup erscheinen.
+- Der Plan wird in `.storage/floorplan_panel.plan` gespeichert und ist Teil Ihres
+  Home-Assistant-Backups.
 
 ## Dienste
 
