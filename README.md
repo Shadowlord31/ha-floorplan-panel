@@ -53,4 +53,11 @@ npm run watch      # beim Entwickeln
 npm test           # Unit-Tests (Geometrie, Zoom)
 ```
 
+Backend-Tests (Python 3.14):
+
+```bash
+pip install -r requirements_test.txt
+pytest -q
+```
+
 Datenmodell: siehe [docs/datenmodell.md](docs/datenmodell.md).
