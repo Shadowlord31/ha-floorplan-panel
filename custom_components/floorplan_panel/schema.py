@@ -190,6 +190,18 @@ ITEM_SCHEMA = vol.Schema(
     extra=vol.REMOVE_EXTRA,
 )
 
+TEMPLATE_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("name"): vol.All(str, vol.Length(min=1, max=100)),
+        vol.Optional("walls", default=list): vol.All([WALL_SCHEMA], vol.Length(max=500)),
+        vol.Optional("openings", default=list): vol.All([OPENING_SCHEMA], vol.Length(max=500)),
+        vol.Optional("areas", default=list): vol.All([AREA_SCHEMA], vol.Length(max=100)),
+        vol.Optional("items", default=list): vol.All([ITEM_SCHEMA], vol.Length(max=500)),
+    },
+    extra=vol.REMOVE_EXTRA,
+)
+
 FLOOR_SCHEMA = vol.Schema(
     {
         vol.Required("id"): _ID,
@@ -220,6 +232,8 @@ PLAN_SCHEMA = vol.Schema(
                 vol.Optional("wallThickness", default=12): vol.All(vol.Coerce(float), vol.Range(min=1, max=100)),
                 # Rasterweite des Editors
                 vol.Optional("grid", default=10): vol.All(vol.Coerce(float), vol.Range(min=1, max=500)),
+                # gespeicherte Auswahlen zum Wiedereinfügen
+                vol.Optional("templates"): vol.All([TEMPLATE_SCHEMA], vol.Length(max=30)),
             },
             extra=vol.REMOVE_EXTRA,
         ),

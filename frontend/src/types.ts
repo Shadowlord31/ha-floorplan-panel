@@ -153,7 +153,20 @@ export interface Floor {
 export interface PlanSettings {
   wallThickness: number;
   grid: number;
+  templates?: Template[];
 }
+
+/** Gespeicherte Auswahl (Wände, Türen/Fenster, Räume, Icons), die sich wieder einfügen lässt. */
+export interface Template {
+  id: string;
+  name: string;
+  walls: Wall[];
+  openings: Opening[];
+  areas: Area[];
+  items: FloorItem[];
+}
+
+export const MAX_TEMPLATES = 30;
 
 export interface Plan {
   version: number;

@@ -19,11 +19,12 @@ import {
   snapToAreaCorner,
   snapToEndpoint,
   snapToGrid,
+  type Rect,
 } from "./geometry";
 import { domainOf, entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
 import { glowEnabled, glowReach, openingPassesLight, wallsLightPassesThrough } from "./light";
 import { maxWallThickness, planSvgStyles, renderArea, renderOpening, renderWalls, wallThickness } from "./render";
-import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, AREA_TYPES, type Area, type Floor, type FloorItem, type Leaf, type Opening, type Plan, type Point, type Shutter, type ShutterSide, type Wall, MAX_LEAVES } from "./types";
+import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, AREA_TYPES, type Area, type Floor, type FloorItem, type Leaf, type Opening, type Plan, type Point, type Shutter, type ShutterSide, type Template, type Wall, MAX_LEAVES, MAX_TEMPLATES } from "./types";
 import { leafSegments, setLeafCount, setLeafWidth, windowLeaves, windowMissingSensor } from "./openings";
 
 const DOMAIN = "floorplan_panel";
@@ -34,7 +35,7 @@ const samePoint = (x: number, y: number, p: Point) => Math.abs(x - p.x) < 0.5 &&
 const ITEM_RADIUS_PX = 14;
 const HANDLE_RADIUS_PX = 7;
 
-type Tool = "select" | "wall" | "area" | "rect" | "door" | "window" | "item";
+type Tool = "select" | "marquee" | "wall" | "area" | "rect" | "door" | "window" | "item";
 type Kind = "wall" | "opening" | "area" | "item";
 interface Selection {
   kind: Kind;
@@ -42,7 +43,11 @@ interface Selection {
 }
 
 interface DragState {
-  mode: "move" | "handle" | "pan" | "rect";
+  mode: "move" | "handle" | "pan" | "rect" | "marquee" | "group";
+  /** Marquee: Auswahl erweitern statt ersetzen. */
+  add?: boolean;
+  /** Gruppenverschieben: Ausgangsstand aller bewegten Elemente. */
+  origs?: { sel: Selection; orig: any }[];
   pointerId: number;
   start: Point;
   screenStart: Point;
@@ -56,6 +61,19 @@ interface DragState {
   links?: Link[];
   viewStart?: View;
 }
+
+interface Clip {
+  walls: Wall[];
+  openings: Opening[];
+  areas: Area[];
+  items: FloorItem[];
+}
+
+const COLLECTION = { wall: "walls", opening: "openings", area: "areas", item: "items" } as const;
+
+/** Zwischenablage bleibt beim Wechsel von Etage und Editor erhalten. */
+let CLIPBOARD: Clip | undefined;
+let PASTE_COUNT = 0;
 
 interface Link {
   /** Welcher Endpunkt der gezogenen Wand gemeint ist (0: Raumecke). */
@@ -72,7 +90,8 @@ interface View {
 }
 
 const TOOLS: { id: Tool; icon: string; label: string; hint: string }[] = [
-  { id: "select", icon: "mdi:cursor-default-outline", label: "Auswahl", hint: "Element anklicken zum Bearbeiten, ziehen zum Verschieben. Leere Fläche ziehen verschiebt die Ansicht, Mausrad zoomt." },
+  { id: "select", icon: "mdi:cursor-default-outline", label: "Auswahl", hint: "Element anklicken zum Bearbeiten, ziehen zum Verschieben. Leere Fläche ziehen verschiebt die Ansicht, Mausrad zoomt. Umschalt-/Strg-Klick wählt mehrere, Rechtsklick oder langes Drücken öffnet das Menü." },
+  { id: "marquee", icon: "mdi:select-drag", label: "Mehrfachauswahl", hint: "Rahmen aufziehen, um mehrere Elemente zu wählen (Umschalt: zur Auswahl hinzufügen). Danach ziehen, duplizieren, kopieren oder als Vorlage speichern." },
   { id: "wall", icon: "mdi:wall", label: "Wand", hint: "Klick setzt Anfang, weitere Klicks setzen Wandstücke. Esc oder Doppelklick beendet. Umschalt: freier Winkel, Alt: ohne Raster." },
   { id: "area", icon: "mdi:vector-polygon", label: "Raum", hint: "Ecken nacheinander anklicken, zum Schließen den ersten Punkt anklicken oder Enter drücken. Esc bricht ab." },
   { id: "rect", icon: "mdi:vector-rectangle", label: "Raum (Rechteck)", hint: "Von Ecke zu Ecke ziehen: legt Raumfläche und die vier Wände in einem Zug an. Alt: ohne Raster/Fang, Esc bricht ab." },
@@ -125,6 +144,11 @@ export class FpEditor extends LitElement {
   @state() private _floorId!: string;
   @state() private _tool: Tool = "select";
   @state() private _sel?: Selection;
+  /** Mehrfachauswahl (inkl. `_sel`), nur gültig bei mehr als einem Element. */
+  @state() private _multi: Selection[] = [];
+  @state() private _marquee?: { a: Point; b: Point };
+  @state() private _menu?: { x: number; y: number };
+  private _lpTimer?: number;
   @state() private _leafSel?: number;
   @state() private _view: View = { x: 0, y: 0, w: 1000, h: 700 };
   @state() private _cursor?: Point;
@@ -149,6 +173,9 @@ export class FpEditor extends LitElement {
   // ---------------------------------------------------------------- Lebenszyklus
 
   protected willUpdate(changed: PropertyValues): void {
+    if (changed.has("_sel") && this._multi.length && !this._multi.some((m) => m.kind === this._sel?.kind && m.id === this._sel?.id)) {
+      this._multi = [];
+    }
     if (changed.has("plan") && !this._draft) {
       this._draft = normalizePlan(structuredClone(this.plan));
       this._baseRevision = this.revision;
@@ -224,6 +251,10 @@ export class FpEditor extends LitElement {
     this._draft = plan;
     this._floorId = floorId;
     if (this._sel && !this._findSelected()) this._sel = undefined;
+    if (this._multi.length) {
+      const left = this._multi.filter((s) => this._elementOf(s));
+      this._setGroup(left);
+    }
   }
 
   private _doUndo(): void {
@@ -266,13 +297,213 @@ export class FpEditor extends LitElement {
   }
 
   private _deleteSelected(): void {
-    const sel = this._sel;
-    if (!sel) return;
+    const group = this._group;
+    if (!group.length) return;
     this._mutate((f) => {
-      const key = sel.kind === "wall" ? "walls" : sel.kind === "opening" ? "openings" : sel.kind === "area" ? "areas" : "items";
-      (f as any)[key] = (f as any)[key].filter((e: { id: string }) => e.id !== sel.id);
+      for (const kind of Object.keys(COLLECTION) as Kind[]) {
+        const ids = new Set(group.filter((s) => s.kind === kind).map((s) => s.id));
+        if (ids.size) (f as any)[COLLECTION[kind]] = (f as any)[COLLECTION[kind]].filter((e: { id: string }) => !ids.has(e.id));
+      }
     });
     this._sel = undefined;
+  }
+
+  // ---------------------------------------------------------------- Mehrfachauswahl, Kopieren, Vorlagen
+
+  private get _group(): Selection[] {
+    if (this._multi.length > 1) return this._multi;
+    return this._sel ? [this._sel] : [];
+  }
+
+  private _elementOf(s: Selection): any {
+    return this._collection(s.kind).find((e) => e.id === s.id);
+  }
+
+  private _inGroup(kind: Kind, id: string): boolean {
+    return this._group.some((s) => s.kind === kind && s.id === id);
+  }
+
+  private _setGroup(list: Selection[]): void {
+    if (list.length > 1) {
+      this._multi = list;
+      this._sel = list[list.length - 1];
+    } else {
+      this._multi = [];
+      this._sel = list[0];
+    }
+  }
+
+  private _toggleMulti(kind: Kind, id: string): void {
+    const cur = this._group;
+    const next = this._inGroup(kind, id) ? cur.filter((s) => !(s.kind === kind && s.id === id)) : [...cur, { kind, id }];
+    this._setGroup(next);
+  }
+
+  private _bbox(s: Selection): Rect | undefined {
+    const e = this._elementOf(s);
+    if (!e) return undefined;
+    let xs: number[];
+    let ys: number[];
+    if (s.kind === "wall") {
+      xs = [e.x1, e.x2];
+      ys = [e.y1, e.y2];
+    } else if (s.kind === "area") {
+      xs = e.points.map((p: Point) => p.x);
+      ys = e.points.map((p: Point) => p.y);
+    } else {
+      const r = s.kind === "opening" ? e.length / 2 : ITEM_RADIUS_PX * this._upp;
+      xs = [e.x - r, e.x + r];
+      ys = [e.y - r, e.y + r];
+    }
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  }
+
+  private _selectInRect(a: Point, b: Point, add: boolean): void {
+    const x1 = Math.min(a.x, b.x);
+    const x2 = Math.max(a.x, b.x);
+    const y1 = Math.min(a.y, b.y);
+    const y2 = Math.max(a.y, b.y);
+    const found: Selection[] = add ? [...this._group] : [];
+    for (const kind of Object.keys(COLLECTION) as Kind[]) {
+      for (const e of this._collection(kind)) {
+        const bb = this._bbox({ kind, id: e.id });
+        if (!bb || bb.x > x2 || bb.x + bb.w < x1 || bb.y > y2 || bb.y + bb.h < y1) continue;
+        if (!found.some((s) => s.kind === kind && s.id === e.id)) found.push({ kind, id: e.id });
+      }
+    }
+    this._setGroup(found);
+  }
+
+  private _shiftElement(kind: Kind, el: any, o: any, dx: number, dy: number): void {
+    if (kind === "wall") Object.assign(el, { x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy });
+    else if (kind === "area") el.points = o.points.map((q: Point) => ({ x: q.x + dx, y: q.y + dy }));
+    else Object.assign(el, { x: o.x + dx, y: o.y + dy });
+  }
+
+  private get _gap(): number {
+    return Math.max(this._draft.settings.grid, 10) * 2;
+  }
+
+  private _groupClip(): Clip {
+    const clip: Clip = { walls: [], openings: [], areas: [], items: [] };
+    for (const s of this._group) {
+      const e = this._elementOf(s);
+      if (e) (clip[COLLECTION[s.kind]] as any[]).push(structuredClone(e));
+    }
+    return clip;
+  }
+
+  private _clipBounds(clip: Clip): Rect | undefined {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const w of clip.walls) xs.push(w.x1, w.x2), ys.push(w.y1, w.y2);
+    for (const o of clip.openings) xs.push(o.x), ys.push(o.y);
+    for (const a of clip.areas) for (const p of a.points) xs.push(p.x), ys.push(p.y);
+    for (const i of clip.items) xs.push(i.x), ys.push(i.y);
+    if (!xs.length) return undefined;
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  }
+
+  /** Fügt eine Kopie des Inhalts mit neuen IDs um (dx, dy) verschoben auf der aktuellen Etage ein. */
+  private _insertClip(clip: Clip, dx: number, dy: number, copySuffix: boolean): Selection[] {
+    const created: Selection[] = [];
+    const areaIds = new Map<string, string>();
+    this._mutate((f) => {
+      for (const w of clip.walls) {
+        const c = structuredClone(w);
+        Object.assign(c, { id: newId("w"), x1: w.x1 + dx, y1: w.y1 + dy, x2: w.x2 + dx, y2: w.y2 + dy });
+        f.walls.push(c);
+        created.push({ kind: "wall", id: c.id });
+      }
+      for (const o of clip.openings) {
+        const c = structuredClone(o);
+        Object.assign(c, { id: newId(o.type === "door" ? "t" : "f"), x: o.x + dx, y: o.y + dy });
+        f.openings.push(c);
+        created.push({ kind: "opening", id: c.id });
+      }
+      for (const a of clip.areas) {
+        const c = structuredClone(a);
+        c.id = newId("r");
+        c.points = a.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+        if (copySuffix && c.name) c.name = `${c.name} (Kopie)`;
+        areaIds.set(a.id, c.id);
+        f.areas.push(c);
+        created.push({ kind: "area", id: c.id });
+      }
+      for (const i of clip.items) {
+        const c = structuredClone(i);
+        Object.assign(c, { id: newId("i"), x: i.x + dx, y: i.y + dy });
+        if (c.area && areaIds.has(c.area)) c.area = areaIds.get(c.area);
+        f.items.push(c);
+        created.push({ kind: "item", id: c.id });
+      }
+    });
+    return created;
+  }
+
+  private _duplicate(): void {
+    const clip = this._groupClip();
+    if (!this._clipBounds(clip)) return;
+    this._setGroup(this._insertClip(clip, this._gap, this._gap, true));
+    this._menu = undefined;
+  }
+
+  private _copy(): void {
+    const clip = this._groupClip();
+    if (!this._clipBounds(clip)) return;
+    CLIPBOARD = clip;
+    PASTE_COUNT = 0;
+    this._menu = undefined;
+  }
+
+  private _paste(): void {
+    if (!CLIPBOARD) return;
+    PASTE_COUNT++;
+    this._setGroup(this._insertClip(CLIPBOARD, this._gap * PASTE_COUNT, this._gap * PASTE_COUNT, true));
+    this._menu = undefined;
+  }
+
+  private _saveTemplate(): void {
+    const clip = this._groupClip();
+    if (!this._clipBounds(clip)) return;
+    if ((this._draft.settings.templates?.length ?? 0) >= MAX_TEMPLATES) {
+      this._error = `Es sind höchstens ${MAX_TEMPLATES} Vorlagen möglich.`;
+      return;
+    }
+    const name = prompt("Name der Vorlage", "Vorlage " + ((this._draft.settings.templates?.length ?? 0) + 1))?.trim();
+    if (!name) return;
+    this._mutate((_f, plan) => {
+      (plan.settings.templates ??= []).push({ id: newId("v"), name, ...clip });
+    });
+  }
+
+  private _insertTemplate(t: Template): void {
+    const b = this._clipBounds(t);
+    if (!b) return;
+    const g = this._draft.settings.grid;
+    const dx = snapToGrid(this._view.x + this._view.w / 2 - (b.x + b.w / 2), g);
+    const dy = snapToGrid(this._view.y + this._view.h / 2 - (b.y + b.h / 2), g);
+    this._setGroup(this._insertClip(t, dx, dy, false));
+  }
+
+  private _deleteTemplate(id: string): void {
+    this._mutate((_f, plan) => {
+      plan.settings.templates = (plan.settings.templates ?? []).filter((t) => t.id !== id);
+      if (!plan.settings.templates.length) delete plan.settings.templates;
+    });
+  }
+
+  private _openMenu(clientX: number, clientY: number, hit: { kind: string; id: string } | undefined): void {
+    if (this._tool !== "select") return;
+    if (hit && hit.kind !== "handle" && !this._inGroup(hit.kind as Kind, hit.id)) this._setGroup([{ kind: hit.kind as Kind, id: hit.id }]);
+    if (!this._group.length && !CLIPBOARD) return;
+    const wrap = this.renderRoot.querySelector(".canvas-wrap")?.getBoundingClientRect();
+    if (!wrap) return;
+    this._menu = { x: clientX - wrap.left, y: clientY - wrap.top };
   }
 
   /** Ändert ein Feld der Auswahl; leere Werte entfernen das Feld. */
@@ -383,6 +614,7 @@ export class FpEditor extends LitElement {
 
   private _onPointerDown(ev: PointerEvent): void {
     if (ev.button === 2) return;
+    this._menu = undefined;
     const p = this._toPlan(ev);
     const before = this._snapshot();
     const base = { pointerId: ev.pointerId, start: p, screenStart: { x: ev.clientX, y: ev.clientY }, before, moved: false };
@@ -396,8 +628,43 @@ export class FpEditor extends LitElement {
     }
 
     switch (this._tool) {
+      case "marquee": {
+        this._drag = { ...base, mode: "marquee", add: ev.shiftKey };
+        this._marquee = { a: p, b: p };
+        this._svg.setPointerCapture(ev.pointerId);
+        break;
+      }
       case "select": {
         const hit = this._hit(ev);
+        if (ev.pointerType !== "mouse") {
+          const cx = ev.clientX;
+          const cy = ev.clientY;
+          window.clearTimeout(this._lpTimer);
+          this._lpTimer = window.setTimeout(() => {
+            this._lpTimer = undefined;
+            const d = this._drag;
+            if (!d || d.moved) return;
+            if (this._svg.hasPointerCapture(d.pointerId)) this._svg.releasePointerCapture(d.pointerId);
+            this._drag = undefined;
+            this._openMenu(cx, cy, hit);
+          }, 550);
+        }
+        const additive = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+        if (hit && hit.kind !== "handle" && additive) {
+          this._toggleMulti(hit.kind, hit.id);
+          break;
+        }
+        if (!hit && ev.shiftKey) {
+          this._drag = { ...base, mode: "marquee", add: true };
+          this._marquee = { a: p, b: p };
+          this._svg.setPointerCapture(ev.pointerId);
+          break;
+        }
+        if (hit && hit.kind !== "handle" && this._multi.length > 1 && this._inGroup(hit.kind, hit.id)) {
+          this._drag = { ...base, mode: "group", origs: this._multi.map((s) => ({ sel: s, orig: structuredClone(this._elementOf(s)) })) };
+          this._svg.setPointerCapture(ev.pointerId);
+          break;
+        }
         if (hit?.kind === "handle" && this._sel) {
           const el = this._findSelected();
           this._drag = { ...base, mode: "handle", sel: this._sel, handle: hit.handle, orig: structuredClone(el) };
@@ -474,7 +741,23 @@ export class FpEditor extends LitElement {
     const dyScreen = ev.clientY - d.screenStart.y;
     if (!d.moved && Math.hypot(dxScreen, dyScreen) < 3) return;
     d.moved = true;
+    window.clearTimeout(this._lpTimer);
 
+    if (d.mode === "marquee") {
+      this._marquee = { a: d.start, b: p };
+      return;
+    }
+    if (d.mode === "group" && d.origs) {
+      const gg = ev.altKey ? 0 : this._draft.settings.grid;
+      const gx = snapToGrid(p.x - d.start.x, gg);
+      const gy = snapToGrid(p.y - d.start.y, gg);
+      for (const { sel, orig } of d.origs) {
+        const target = this._elementOf(sel);
+        if (target) this._shiftElement(sel.kind, target, orig, gx, gy);
+      }
+      this._draft = { ...this._draft };
+      return;
+    }
     if (d.mode === "pan" && d.viewStart) {
       const upp = this._upp;
       this._view = { ...d.viewStart, x: d.viewStart.x - dxScreen * upp, y: d.viewStart.y - dyScreen * upp };
@@ -532,10 +815,20 @@ export class FpEditor extends LitElement {
   }
 
   private _onPointerUp(ev: PointerEvent): void {
+    window.clearTimeout(this._lpTimer);
     const d = this._drag;
     if (!d || d.pointerId !== ev.pointerId) return;
     this._drag = undefined;
     if (this._svg.hasPointerCapture(ev.pointerId)) this._svg.releasePointerCapture(ev.pointerId);
+    if (d.mode === "marquee") {
+      const m = this._marquee;
+      this._marquee = undefined;
+      if (m && d.moved) {
+        this._selectInRect(m.a, m.b, !!d.add);
+        this._tool = "select";
+      }
+      return;
+    }
     if (d.mode === "rect") {
       this._finishRect(d.start, this._snap(this._toPlan(ev), ev));
       return;
@@ -606,6 +899,14 @@ export class FpEditor extends LitElement {
       this._doRedo();
       return;
     }
+    if ((ev.ctrlKey || ev.metaKey) && !typing && ["c", "v", "d"].includes(ev.key.toLowerCase())) {
+      ev.preventDefault();
+      const k = ev.key.toLowerCase();
+      if (k === "c") this._copy();
+      else if (k === "v") this._paste();
+      else this._duplicate();
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
       ev.preventDefault();
       if (this._dirty && !this._saving) this._save();
@@ -618,11 +919,12 @@ export class FpEditor extends LitElement {
         this._drag = undefined;
       } else if (this._chainStart) this._chainStart = undefined;
       else if (this._roomPoints.length) this._roomPoints = [];
+      else if (this._menu) this._menu = undefined;
       else if (this._tool !== "select") this._tool = "select";
       else this._sel = undefined;
     } else if (ev.key === "Enter" && this._tool === "area" && this._roomPoints.length >= 3) {
       this._finishRoom();
-    } else if ((ev.key === "Delete" || ev.key === "Backspace") && this._sel) {
+    } else if ((ev.key === "Delete" || ev.key === "Backspace") && this._group.length) {
       ev.preventDefault();
       this._deleteSelected();
     }
@@ -772,13 +1074,26 @@ export class FpEditor extends LitElement {
             @pointerleave=${() => (this._cursor = undefined)}
             @dblclick=${this._onDblClick}
             @wheel=${this._onWheel}
-            @contextmenu=${(ev: Event) => {
+            @contextmenu=${(ev: MouseEvent) => {
               ev.preventDefault();
               this._chainStart = undefined;
+              this._openMenu(ev.clientX, ev.clientY, this._hit(ev));
             }}
           >
             ${this._renderCanvas()}
           </svg>
+          ${this._menu
+            ? html`<div class="ctx-menu" style="left:${this._menu.x}px;top:${this._menu.y}px">
+                ${this._group.length
+                  ? html`<button @click=${this._duplicate}><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplizieren</button>
+                      <button @click=${this._copy}><ha-icon icon="mdi:content-copy"></ha-icon>Kopieren</button>`
+                  : nothing}
+                ${CLIPBOARD ? html`<button @click=${this._paste}><ha-icon icon="mdi:content-paste"></ha-icon>Einfügen</button>` : nothing}
+                ${this._group.length
+                  ? html`<button @click=${() => ((this._menu = undefined), this._deleteSelected())}><ha-icon icon="mdi:delete-outline"></ha-icon>Löschen</button>`
+                  : nothing}
+              </div>`
+            : nothing}
           <div class="hint">${tool.hint}</div>
         </div>
         <div class="props">${this._renderProps()}</div>
@@ -853,6 +1168,17 @@ export class FpEditor extends LitElement {
   }
 
   private _renderSelectionOverlay(upp: number) {
+    if (this._marquee) {
+      const { a, b } = this._marquee;
+      return svg`<rect class="marquee" x=${Math.min(a.x, b.x)} y=${Math.min(a.y, b.y)} width=${Math.abs(a.x - b.x)} height=${Math.abs(a.y - b.y)} stroke-width=${upp}></rect>`;
+    }
+    if (this._multi.length > 1) {
+      const pad = 4 * upp;
+      return svg`${this._multi.map((s) => {
+        const b = this._bbox(s);
+        return b ? svg`<rect class="sel-outline" x=${b.x - pad} y=${b.y - pad} width=${b.w + 2 * pad} height=${b.h + 2 * pad} stroke-width=${2 * upp}></rect>` : nothing;
+      })}`;
+    }
     const el = this._findSelected();
     if (!el || !this._sel) return nothing;
     if (this._sel.kind === "item" && glowEnabled(el as FloorItem)) {
@@ -941,12 +1267,14 @@ export class FpEditor extends LitElement {
   // ---------------------------------------------------------------- Eigenschaften
 
   private _renderProps(): TemplateResult {
+    if (this._multi.length > 1) return this._renderMultiProps();
     const el = this._findSelected();
     if (!el || !this._sel) return this._renderPlanProps();
     const kindLabel = { wall: "Wand", opening: (el as Opening).type === "window" ? "Fenster" : "Tür", area: "Raum", item: "Icon" }[this._sel.kind];
     return html`
       <div class="props-head">
         <h3>${kindLabel}</h3>
+        <button class="icon-btn" title="Duplizieren (Strg+D)" @click=${this._duplicate}><ha-icon icon="mdi:content-duplicate"></ha-icon></button>
         <button class="icon-btn" title="Löschen (Entf)" @click=${this._deleteSelected}><ha-icon icon="mdi:delete-outline"></ha-icon></button>
         <button class="icon-btn" title="Auswahl aufheben" @click=${() => (this._sel = undefined)}><ha-icon icon="mdi:close"></ha-icon></button>
       </div>
@@ -957,6 +1285,24 @@ export class FpEditor extends LitElement {
         : this._sel.kind === "area"
         ? this._renderAreaProps(el as Area)
         : this._renderItemProps(el as FloorItem)}
+    `;
+  }
+
+  private _renderMultiProps(): TemplateResult {
+    const count = (k: Kind) => this._multi.filter((s) => s.kind === k).length;
+    return html`
+      <div class="props-head">
+        <h3>${this._multi.length} Elemente</h3>
+        <button class="icon-btn" title="Löschen (Entf)" @click=${this._deleteSelected}><ha-icon icon="mdi:delete-outline"></ha-icon></button>
+        <button class="icon-btn" title="Auswahl aufheben" @click=${() => (this._sel = undefined)}><ha-icon icon="mdi:close"></ha-icon></button>
+      </div>
+      <p class="muted">${count("wall")} Wände · ${count("opening")} Türen/Fenster · ${count("area")} Räume · ${count("item")} Icons</p>
+      <div class="row-btns">
+        <button class="chip" @click=${this._duplicate}><ha-icon icon="mdi:content-duplicate"></ha-icon>Duplizieren</button>
+        <button class="chip" @click=${this._copy}><ha-icon icon="mdi:content-copy"></ha-icon>Kopieren</button>
+        <button class="chip" @click=${this._saveTemplate}><ha-icon icon="mdi:content-save-outline"></ha-icon>Als Vorlage</button>
+      </div>
+      <p class="muted">Ziehen verschiebt alle gemeinsam. Strg+C / Strg+V kopieren und einfügen, auch auf andere Etagen.</p>
     `;
   }
 
@@ -1422,6 +1768,20 @@ export class FpEditor extends LitElement {
               )}
             </div>`
         : nothing}
+      <h4>Vorlagen</h4>
+      ${plan.settings.templates?.length
+        ? html`<div class="room-list">
+            ${plan.settings.templates.map(
+              (t) => html`<div class="row">
+                <button class="room-btn" title="In die Mitte der Ansicht einfügen" @click=${() => this._insertTemplate(t)}>
+                  <ha-icon icon="mdi:shape-plus-outline"></ha-icon>${t.name}
+                  <small>${t.walls.length + t.openings.length + t.areas.length + t.items.length} Elemente</small>
+                </button>
+                <button class="icon-btn" title="Vorlage löschen" @click=${() => this._deleteTemplate(t.id)}><ha-icon icon="mdi:delete-outline"></ha-icon></button>
+              </div>`
+            )}
+          </div>`
+        : html`<p class="muted">Mehrere Elemente auswählen und als Vorlage speichern, um sie später wieder einzufügen.</p>`}
       <h4>Räume</h4>
       <div class="room-list">
         ${floor.areas.length
@@ -1651,6 +2011,7 @@ export class FpEditor extends LitElement {
         user-select: none;
         background: var(--secondary-background-color);
       }
+      svg.canvas.tool-marquee,
       svg.canvas.tool-wall,
       svg.canvas.tool-area,
       svg.canvas.tool-door,
@@ -1717,6 +2078,44 @@ export class FpEditor extends LitElement {
         stroke: var(--primary-color);
         stroke-dasharray: 6 4;
         pointer-events: none;
+      }
+      .marquee {
+        fill: var(--primary-color);
+        fill-opacity: 0.08;
+        stroke: var(--primary-color);
+        stroke-dasharray: 6 4;
+        pointer-events: none;
+      }
+      .ctx-menu {
+        position: absolute;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        padding: 4px;
+        border-radius: 8px;
+        background: var(--card-background-color, #fff);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      }
+      .ctx-menu button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border: none;
+        border-radius: 6px;
+        background: none;
+        color: var(--primary-text-color);
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .ctx-menu button:hover {
+        background: var(--secondary-background-color);
+      }
+      .row-btns {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
       }
       .handle {
         fill: #fff;
