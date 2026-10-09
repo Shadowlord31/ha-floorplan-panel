@@ -63,8 +63,10 @@ export class FpPlanView extends LitElement {
   private _measure(): void {
     if (!this.plan) return;
     const { width, height } = this.plan.canvas;
-    const availW = this.clientWidth;
-    const availH = this.clientHeight;
+    // Innenabstand abziehen; die Box selbst liegt absolut und beeinflusst die Größe des Elements nicht
+    const cs = getComputedStyle(this);
+    const availW = this.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const availH = this.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
     if (!availW || !availH) return;
     const scale = Math.min(availW / width, availH / height);
     const w = Math.floor(width * scale);
@@ -178,16 +180,17 @@ export class FpPlanView extends LitElement {
     unsafeCSS(planSvgStyles),
     css`
       :host {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: block;
         position: relative;
         overflow: hidden;
         min-height: 0;
         min-width: 0;
       }
       .plan {
-        position: relative;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
         overflow: hidden;
         border-radius: 12px;
         background: var(--fp-floor-color, var(--card-background-color, #fff));

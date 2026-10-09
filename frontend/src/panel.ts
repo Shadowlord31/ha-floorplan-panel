@@ -108,6 +108,11 @@ export class FloorplanPanel extends LitElement {
     this._zoomedAreaId = this._zoomedAreaId === ev.detail.id ? undefined : ev.detail.id;
   }
 
+  /** Öffnet/schließt die HA-Seitenleiste (auf schmalen Bildschirmen). */
+  private _toggleMenu(): void {
+    this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }));
+  }
+
   private _openEditor(roomId?: string): void {
     this._editRoomId = roomId;
     this._editing = true;
@@ -146,7 +151,9 @@ export class FloorplanPanel extends LitElement {
     const isEmpty = !!floor && !floor.walls.length && !floor.areas.length && !floor.items.length;
     return html`
       <div class="toolbar">
-        <ha-menu-button .hass=${this.hass} .narrow=${this.narrow}></ha-menu-button>
+        ${this.narrow
+          ? html`<button class="icon-btn" title="Menü" @click=${this._toggleMenu}><ha-icon icon="mdi:menu"></ha-icon></button>`
+          : html`<span class="spacer"></span>`}
         <div class="main-title">Grundriss</div>
         ${plan && plan.floors.length > 1
           ? html`<div class="floors">
@@ -210,7 +217,9 @@ export class FloorplanPanel extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      height: 100%;
+      /* HA gibt dem Panel-Container keine Höhe vor: volle Fensterhöhe (dvh: mobile Adressleiste) */
+      height: 100vh;
+      height: 100dvh;
       background: var(--primary-background-color);
       color: var(--primary-text-color);
       font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
@@ -226,6 +235,13 @@ export class FloorplanPanel extends LitElement {
       color: var(--app-header-text-color, #fff);
       border-bottom: var(--app-header-border-bottom, none);
       flex: none;
+    }
+    .spacer {
+      width: 8px;
+    }
+    fp-editor {
+      flex: 1;
+      min-height: 0;
     }
     .main-title {
       flex: 1;

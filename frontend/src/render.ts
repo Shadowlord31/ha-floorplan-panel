@@ -6,7 +6,7 @@
  * Fenster als Doppellinie, Öffnungen schneiden per Maske aus der Wand aus.
  */
 import { svg, nothing, type SVGTemplateResult } from "lit";
-import { polygonCentroid } from "./geometry";
+import { pointInPolygon, polygonCentroid } from "./geometry";
 import { isActive, type HomeAssistant } from "./ha";
 import type { Area, Floor, Opening, Plan, Wall } from "./types";
 
@@ -36,14 +36,19 @@ export function renderArea(
 ): SVGTemplateResult {
   const { color, opacity } = areaFill(area, opts.hass);
   const pts = area.points.map((p) => `${p.x},${p.y}`).join(" ");
-  const c = polygonCentroid(area.points);
+  // Name oben links in den Raum statt in die Mitte – dort sitzt meist das Deckenlicht
+  const minX = Math.min(...area.points.map((p) => p.x));
+  const minY = Math.min(...area.points.map((p) => p.y));
+  let label = { x: minX + opts.labelSize * 0.8, y: minY + opts.labelSize * 1.5 };
+  if (!pointInPolygon(area.points, label.x, label.y)) label = polygonCentroid(area.points);
+  const anchor = pointInPolygon(area.points, minX + opts.labelSize * 0.8, minY + opts.labelSize * 1.5) ? "start" : "middle";
   return svg`
     <g class="area ${opts.selected ? "selected" : ""} ${opts.dimmed ? "dimmed" : ""}" data-id=${area.id}>
       <polygon points=${pts} fill=${color} fill-opacity=${opacity}></polygon>
       ${
         area.showName !== false && area.name
-          ? svg`<text class="area-label" x=${c.x} y=${c.y} font-size=${opts.labelSize}
-                  text-anchor="middle" dominant-baseline="middle">${area.name}</text>`
+          ? svg`<text class="area-label" x=${label.x} y=${label.y} font-size=${opts.labelSize}
+                  text-anchor=${anchor} dominant-baseline="middle">${area.name}</text>`
           : nothing
       }
     </g>`;

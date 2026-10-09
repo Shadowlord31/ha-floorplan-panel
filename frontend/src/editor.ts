@@ -1196,7 +1196,6 @@ export class FpEditor extends LitElement {
       :host {
         display: flex;
         flex-direction: column;
-        height: 100%;
         background: var(--primary-background-color);
         color: var(--primary-text-color);
       }
