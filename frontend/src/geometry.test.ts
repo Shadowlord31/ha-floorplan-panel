@@ -207,3 +207,17 @@ describe("Andocken", () => {
     expect(uncoveredParts({ x: 0, y: 10 }, { x: 100, y: 10 }, walls)).toHaveLength(1);
   });
 });
+
+import { roomWalls, wallRooms } from "./geometry";
+
+describe("Raum-Wände", () => {
+  const a = area("r", rect(0, 0, 100, 100));
+  const on: Wall = { id: "a", x1: 0, y1: 0, x2: 100, y2: 0 };
+  const part: Wall = { id: "b", x1: 100, y1: 20, x2: 100, y2: 60 };
+  const off: Wall = { id: "c", x1: 0, y1: 50, x2: 100, y2: 50 };
+  it("findet Wände auf den Raumkanten, auch Teilstücke", () => {
+    expect(roomWalls(a, [on, part, off]).map((w) => w.id)).toEqual(["a", "b"]);
+    expect(wallRooms(on, [a, area("x", rect(200, 0, 300, 100))]).map((r) => r.id)).toEqual(["r"]);
+    expect(wallRooms(off, [a])).toEqual([]);
+  });
+});

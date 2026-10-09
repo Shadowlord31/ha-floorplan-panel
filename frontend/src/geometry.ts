@@ -410,3 +410,25 @@ export function uncoveredParts(a: Point, b: Point, walls: readonly Wall[], tol =
   if (cur < 1 && (1 - cur) * len > 1) out.push([at(cur), at(1)]);
   return out;
 }
+
+export function pointOnSegment(p: Point, a: Point, b: Point, tol = 0.5): boolean {
+  return distance(p, projectOnSegment(p, a, b).point) <= tol;
+}
+
+/** Wände, die komplett auf einer Kante des Raum-Polygons liegen. */
+export function roomWalls(area: Area, walls: readonly Wall[], tol = 0.5): Wall[] {
+  const pts = area.points;
+  return walls.filter((w) => {
+    const p1 = { x: w.x1, y: w.y1 };
+    const p2 = { x: w.x2, y: w.y2 };
+    return pts.some((a, i) => {
+      const b = pts[(i + 1) % pts.length];
+      return pointOnSegment(p1, a, b, tol) && pointOnSegment(p2, a, b, tol);
+    });
+  });
+}
+
+/** Räume, zu deren Kante die Wand gehört. */
+export function wallRooms(wall: Wall, areas: readonly Area[]): Area[] {
+  return areas.filter((a) => roomWalls(a, [wall]).length > 0);
+}

@@ -60,7 +60,7 @@ Grundriss bleibt erhalten.
   Räume lassen sich als Rechteck aufziehen (mit Raumart), Ecken und Wände rasten an Nachbarn ein,
   gemeinsame Ecken ziehen mit, Ausrichtungslinien erscheinen live. Mehrfachauswahl (Umschalt/Strg-Klick,
   Aufziehen), Duplizieren, Strg+C/V/D, Vorlagen, Kontextmenü (Rechtsklick bzw. langes Drücken),
-  Maße per Zahleneingabe und automatisches Platzieren der Icons eines Raums.
+  Raum als Einheit (erster Klick wählt den Raum samt Wänden, Ecken- und Kantengriffe ändern die Größe, zweiter Klick die einzelne Wand), Maße per Zahleneingabe und automatisches Platzieren der Icons eines Raums.
 - Pro Raum legen Sie fest, welche Geräte, Szenen und Skripte im Popup erscheinen.
 - Der Plan wird in `.storage/floorplan_panel.plan` gespeichert und ist Teil Ihres
   Home-Assistant-Backups.

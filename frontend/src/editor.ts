@@ -18,13 +18,16 @@ import {
   nearestWall,
   orthoSnap,
   pointInPolygon,
+  pointOnSegment,
   polygonCentroid,
   projectOnSegment,
   snapToAreaCorner,
   snapToEndpoint,
   snapToGrid,
+  roomWalls,
   snapToWallLine,
   uncoveredParts,
+  wallRooms,
   type Guide,
   type Rect,
 } from "./geometry";
@@ -66,6 +69,8 @@ interface DragState {
   orig?: any;
   /** Beim Ziehen mitbewegte Wand-Endpunkte und Raumecken, die auf dem gezogenen Punkt liegen. */
   links?: Link[];
+  /** Kanten-Ziehen: Normale und alle auf der Kante liegenden Punkte. */
+  edge?: { n: Point; pts: { x: number; y: number; set: (x: number, y: number) => void }[] };
   viewStart?: View;
 }
 
@@ -97,7 +102,7 @@ interface View {
 }
 
 const TOOLS: { id: Tool; icon: string; label: string; hint: string }[] = [
-  { id: "select", icon: "mdi:cursor-default-outline", label: "Auswahl", hint: "Element anklicken zum Bearbeiten, ziehen zum Verschieben. Leere Fläche ziehen verschiebt die Ansicht, Mausrad zoomt. Umschalt-/Strg-Klick wählt mehrere, Rechtsklick oder langes Drücken öffnet das Menü." },
+  { id: "select", icon: "mdi:cursor-default-outline", label: "Auswahl", hint: "Raum oder Wand anklicken: der erste Klick wählt den ganzen Raum (ziehen verschiebt ihn samt Wänden, Griffe an Ecken und Kanten ändern die Größe), ein weiterer Klick auf eine Wand wählt nur die Wand. Leere Fläche ziehen verschiebt die Ansicht, Mausrad zoomt. Umschalt-/Strg-Klick wählt mehrere, Rechtsklick oder langes Drücken öffnet das Menü." },
   { id: "marquee", icon: "mdi:select-drag", label: "Mehrfachauswahl", hint: "Rahmen aufziehen, um mehrere Elemente zu wählen (Umschalt: zur Auswahl hinzufügen). Danach ziehen, duplizieren, kopieren oder als Vorlage speichern." },
   { id: "wall", icon: "mdi:wall", label: "Wand", hint: "Klick setzt Anfang, weitere Klicks setzen Wandstücke. Esc oder Doppelklick beendet. Umschalt: freier Winkel, Alt: ohne Raster." },
   { id: "wallrect", icon: "mdi:square-outline", label: "Wände (Rechteck)", hint: "Von Ecke zu Ecke ziehen: legt nur die vier Wände an, ohne Raumfläche. Bestehende Wände werden mitgenutzt, nicht doppelt gezeichnet. Alt: ohne Fang, Esc bricht ab." },
@@ -697,10 +702,16 @@ export class FpEditor extends LitElement {
           if (this._sel.kind === "wall" && el) {
             const end = hit.handle === "p1" ? 1 : 2;
             this._drag.links = [this._linksAt(el as Wall, end)];
+          } else if (this._sel.kind === "area" && el && hit.handle?.startsWith("e")) {
+            this._drag.edge = this._edgeSetup(el as Area, Number(hit.handle.slice(1)));
           } else if (this._sel.kind === "area" && el && hit.handle?.startsWith("v")) {
             const pt = (el as Area).points[Number(hit.handle!.slice(1))];
             this._drag.links = [this._linksAt(undefined, 0, pt, el as Area)];
           }
+        } else if (hit && hit.kind !== "handle" && this._roomTarget(hit)) {
+          const room = this._roomTarget(hit)!;
+          this._sel = { kind: "area", id: room.id };
+          this._drag = { ...base, mode: "group", origs: this._roomGroup(room).map((s) => ({ sel: s, orig: structuredClone(this._elementOf(s)) })) };
         } else if (hit && hit.kind !== "handle") {
           this._sel = { kind: hit.kind, id: hit.id };
           this._drag = { ...base, mode: "move", sel: this._sel, orig: structuredClone(this._findSelected()) };
@@ -837,6 +848,11 @@ export class FpEditor extends LitElement {
         el[`x${end}`] = np.x;
         el[`y${end}`] = np.y;
         if (link) this._applyLink(link, np);
+      } else if (d.sel.kind === "area" && d.handle.startsWith("e") && d.edge) {
+        const { n, pts } = d.edge;
+        const gs = ev.altKey ? 0 : this._draft.settings.grid;
+        const amount = snapToGrid((p.x - d.start.x) * n.x + (p.y - d.start.y) * n.y, gs);
+        for (const q of pts) q.set(q.x + n.x * amount, q.y + n.y * amount);
       } else if (d.sel.kind === "area" && d.handle.startsWith("v")) {
         const pt = el.points[Number(d.handle.slice(1))] as Point;
         const link = d.links?.[0];
@@ -1265,7 +1281,11 @@ export class FpEditor extends LitElement {
         <polygon class="sel-outline" points=${a.points.map((p) => `${p.x},${p.y}`).join(" ")} stroke-width=${2 * upp}></polygon>
         ${a.points.map(
           (p, i) => svg`<circle class="handle" data-handle="v${i}" cx=${p.x} cy=${p.y} r=${hr} stroke-width=${2 * upp}></circle>`
-        )}`;
+        )}
+        ${a.points.map((p, i) => {
+          const q = a.points[(i + 1) % a.points.length];
+          return svg`<rect class="handle" data-handle="e${i}" x=${(p.x + q.x) / 2 - hr} y=${(p.y + q.y) / 2 - hr} width=${2 * hr} height=${2 * hr} rx=${hr / 3} stroke-width=${2 * upp}></rect>`;
+        })}`;
     }
     return nothing;
   }
@@ -1435,6 +1455,46 @@ export class FpEditor extends LitElement {
       </label>
       <p class="muted">Länge ändern verschiebt den zweiten Endpunkt; verbundene Wände ziehen mit.</p>
     `;
+  }
+
+  /** Raum, der bei diesem Treffer als Ganzes gewählt wird (undefined: Element direkt wählen). */
+  private _roomTarget(hit: { kind: Kind | "handle"; id: string }): Area | undefined {
+    if (hit.kind === "area") return this._floor.areas.find((a) => a.id === hit.id);
+    if (hit.kind !== "wall") return undefined;
+    const w = this._floor.walls.find((x) => x.id === hit.id);
+    if (!w) return undefined;
+    const rooms = wallRooms(w, this._floor.areas);
+    const sel = this._sel;
+    if (!rooms.length || (sel?.kind === "wall" && sel.id === w.id)) return undefined;
+    return rooms.find((r) => sel?.kind === "area" && sel.id === r.id) ? undefined : rooms[0];
+  }
+
+  private _roomGroup(a: Area): Selection[] {
+    const f = this._floor;
+    const walls = roomWalls(a, f.walls);
+    const out: Selection[] = [{ kind: "area", id: a.id }, ...walls.map((w) => ({ kind: "wall" as const, id: w.id }))];
+    for (const o of f.openings) {
+      if (walls.some((w) => pointOnSegment({ x: o.x, y: o.y }, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }, 3))) out.push({ kind: "opening", id: o.id });
+    }
+    for (const i of f.items) if (pointInPolygon(a.points, i.x, i.y)) out.push({ kind: "item", id: i.id });
+    return out;
+  }
+
+  private _edgeSetup(a: Area, i: number): DragState["edge"] {
+    const p = a.points[i];
+    const q = a.points[(i + 1) % a.points.length];
+    const len = distance(p, q) || 1;
+    const n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+    const pts: NonNullable<DragState["edge"]>["pts"] = [];
+    const on = (pt: Point) => pointOnSegment(pt, p, q);
+    for (const area of this._floor.areas) {
+      for (const v of area.points) if (on(v)) pts.push({ x: v.x, y: v.y, set: (x, y) => Object.assign(v, { x, y }) });
+    }
+    for (const w of this._floor.walls) {
+      if (on({ x: w.x1, y: w.y1 })) pts.push({ x: w.x1, y: w.y1, set: (x, y) => Object.assign(w, { x1: x, y1: y }) });
+      if (on({ x: w.x2, y: w.y2 })) pts.push({ x: w.x2, y: w.y2, set: (x, y) => Object.assign(w, { x2: x, y2: y }) });
+    }
+    return { n, pts };
   }
 
   private _setWallLength(len: number): void {
