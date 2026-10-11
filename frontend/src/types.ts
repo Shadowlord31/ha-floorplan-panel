@@ -164,7 +164,11 @@ export interface FurniturePart {
   /** path: SVG-Pfaddaten und deren Ursprungs-Box [minX, minY, breite, höhe]. */
   d?: string;
   vb?: [number, number, number, number];
+  /** Füllfarbe; "none" = ungefüllt (reine Linienzeichnung). */
   fill?: string;
+  /** Eigene Konturfarbe und -breite (Plan-Einheiten), z. B. aus dem SVG-Import. */
+  stroke?: string;
+  strokeWidth?: number;
   opacity?: number;
   /** Beschriftungs-Icon in der Mitte des Teils. */
   icon?: string;

@@ -124,22 +124,27 @@ function partTransform(p: FurniturePart): string | undefined {
 
 /** Ein Teil als SVG; `fill` überschreibt die Füllung der Vorlage. */
 export function renderPart(p: FurniturePart, opts: { fill?: string; cls?: string; iconSize?: number } = {}): SVGTemplateResult {
-  const fill = opts.fill ?? (isSafeColor(p.fill) ? p.fill : DEFAULT_FURNITURE_FILL);
+  const unfilled = p.fill === "none";
+  const fill = unfilled ? "none" : opts.fill ?? (isSafeColor(p.fill) ? p.fill : DEFAULT_FURNITURE_FILL);
+  const own = isSafeColor(p.stroke) && p.stroke !== "none";
+  const sx = p.shape === "path" && p.vb && p.vb[2] ? (p.w ?? p.vb[2]) / p.vb[2] : 1;
+  const sw = (p.strokeWidth ?? 1) / (sx || 1);
+  const strokeStyle = own ? `stroke:${p.stroke};stroke-width:${sw};stroke-opacity:1;vector-effect:none` : nothing;
   const op = p.opacity ?? 1;
   const cls = `fpart ${opts.cls ?? ""}`;
   let shape: SVGTemplateResult | typeof nothing = nothing;
   if (p.shape === "rect") {
     const w = p.w ?? 0;
     const h = p.h ?? 0;
-    shape = svg`<rect class=${cls} x=${p.x - w / 2} y=${p.y - h / 2} width=${w} height=${h} fill=${fill} fill-opacity=${op}></rect>`;
+    shape = svg`<rect class=${cls} x=${p.x - w / 2} y=${p.y - h / 2} width=${w} height=${h} fill=${fill} fill-opacity=${op} style=${strokeStyle}></rect>`;
   } else if (p.shape === "circle") {
-    shape = svg`<circle class=${cls} cx=${p.x} cy=${p.y} r=${p.r ?? 0} fill=${fill} fill-opacity=${op}></circle>`;
+    shape = svg`<circle class=${cls} cx=${p.x} cy=${p.y} r=${p.r ?? 0} fill=${fill} fill-opacity=${op} style=${strokeStyle}></circle>`;
   } else if (p.shape === "polygon") {
     const pts = (p.points ?? []).map((q) => `${p.x + q.x},${p.y + q.y}`).join(" ");
-    shape = svg`<polygon class=${cls} points=${pts} fill=${fill} fill-opacity=${op}></polygon>`;
+    shape = svg`<polygon class=${cls} points=${pts} fill=${fill} fill-opacity=${op} style=${strokeStyle}></polygon>`;
   } else if (p.shape === "path" && isSafePath(p.d)) {
     shape = svg`<path class=${cls} d=${p.d} transform=${partTransform(p) ?? nothing} fill=${fill} fill-opacity=${op}
-      vector-effect="non-scaling-stroke"></path>`;
+      style=${strokeStyle}></path>`;
   }
   const box = partBox(p);
   const size = opts.iconSize ?? Math.max(8, Math.min(box.x1 - box.x0, box.y1 - box.y0) * 0.7);
@@ -177,7 +182,7 @@ export function itemFill(item: FloorItem, active: boolean): string | undefined {
 export const furnitureStyles = `
   .furniture { pointer-events: none; }
   .furniture .fpart { stroke: var(--fp-wall-color, var(--primary-text-color)); stroke-width: 1; stroke-opacity: .55; vector-effect: non-scaling-stroke; }
-  .furniture.selected .fpart { stroke: var(--primary-color); stroke-width: 2; stroke-opacity: 1; }
+  .furniture.selected .fpart { stroke: var(--primary-color) !important; stroke-width: 2 !important; stroke-opacity: 1 !important; vector-effect: non-scaling-stroke !important; }
   .furniture .fpart-icon { color: var(--primary-text-color); opacity: .75; }
   .furniture .fo-icon { display: flex; align-items: center; justify-content: center; }
 `;
@@ -194,9 +199,38 @@ const num = (el: Element, name: string, def = 0): number => {
   return Number.isFinite(v) ? v : def;
 };
 
-function fillOf(el: Element): string | undefined {
-  const f = el.getAttribute("fill") ?? /fill\s*:\s*([^;]+)/.exec(el.getAttribute("style") ?? "")?.[1]?.trim();
-  return f && f !== "none" && isSafeColor(f) ? f : undefined;
+/** Liest ein Präsentationsattribut/-style samt Vererbung bis zur Wurzel. */
+function inherited(el: Element, name: string): string | undefined {
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const v = n.getAttribute(name)?.trim() || new RegExp(`(?:^|;)\\s*${name}\\s*:\\s*([^;]+)`).exec(n.getAttribute("style") ?? "")?.[1]?.trim();
+    if (v && v !== "inherit") return v;
+  }
+  return undefined;
+}
+
+function colorOf(el: Element, name: "fill" | "stroke"): string | undefined {
+  let v = inherited(el, name);
+  if (v?.toLowerCase() === "currentcolor") v = inherited(el, "color");
+  if (!v) return undefined;
+  if (v === "none") return "none";
+  return isSafeColor(v) && !v.toLowerCase().startsWith("url") ? v : undefined;
+}
+
+function styleOf(el: Element, k: number): Partial<FurniturePart> {
+  const out: Partial<FurniturePart> = {};
+  const fill = colorOf(el, "fill");
+  const stroke = colorOf(el, "stroke");
+  if (fill) out.fill = fill;
+  if (stroke && stroke !== "none") {
+    out.stroke = stroke;
+    const w = parseFloat(inherited(el, "stroke-width") ?? "");
+    out.strokeWidth = Math.max(0.2, Math.round((Number.isFinite(w) && w > 0 ? w : 1) * k * 100) / 100);
+    if (!fill) out.fill = out.fill ?? "none";
+  } else if (fill === "none") {
+    out.stroke = "#444";
+    out.strokeWidth = 1;
+  }
+  return out;
 }
 
 /**
@@ -228,8 +262,7 @@ export function importSvg(text: string, fit = 100): ImportResult {
   const round = (v: number) => Math.round(v * 100) / 100;
   for (const el of Array.from(root.querySelectorAll("*"))) {
     const tag = el.localName.toLowerCase();
-    const fill = fillOf(el);
-    const common = fill ? { fill } : {};
+    const common = styleOf(el, k);
     if (tag === "rect") {
       const w = num(el, "width");
       const h = num(el, "height");
@@ -267,7 +300,19 @@ export function importSvg(text: string, fit = 100): ImportResult {
         continue;
       }
       add({ shape: "path", d, vb, x: 0, y: 0, w: round(vb[2] * k), h: round(vb[3] * k), ...common });
-    } else if (["line", "polyline", "image", "use", "text"].includes(tag)) {
+    } else if (tag === "line" || tag === "polyline") {
+      const nums =
+        tag === "line"
+          ? [num(el, "x1"), num(el, "y1"), num(el, "x2"), num(el, "y2")]
+          : (el.getAttribute("points") ?? "").split(/[\s,]+/).map(Number).filter(Number.isFinite);
+      if (nums.length >= 4) {
+        let d = `M ${nums[0]} ${nums[1]}`;
+        for (let i = 2; i + 1 < nums.length; i += 2) d += ` L ${nums[i]} ${nums[i + 1]}`;
+        const st = { ...common, fill: "none" };
+        if (!st.stroke) Object.assign(st, { stroke: "#444", strokeWidth: 1 });
+        add({ shape: "path", d, vb, x: 0, y: 0, w: round(vb[2] * k), h: round(vb[3] * k), ...st });
+      } else skipped++;
+    } else if (["image", "use", "text"].includes(tag)) {
       skipped++;
     }
   }

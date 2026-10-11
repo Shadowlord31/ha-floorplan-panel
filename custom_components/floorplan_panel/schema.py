@@ -215,6 +215,8 @@ FURNITURE_PART_SCHEMA = vol.Schema(
         vol.Optional("d"): _PATH_DATA,
         vol.Optional("vb"): vol.All([_COORD], vol.Length(min=4, max=4)),
         vol.Optional("fill"): _COLOR,
+        vol.Optional("stroke"): _COLOR,
+        vol.Optional("strokeWidth"): _POSITIVE,
         vol.Optional("opacity"): _OPACITY,
         vol.Optional("icon"): _ICON,
     },

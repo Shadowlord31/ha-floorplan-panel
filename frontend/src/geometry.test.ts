@@ -290,6 +290,17 @@ describe("Möbel", () => {
     expect(r.skipped).toBe(1);
   });
 
+  it("übernimmt vererbte Linienzeichnung (fill none, currentColor)", () => {
+    const r = importSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none" stroke="currentColor" stroke-width="2" style="color:#222"><path d="M10 10 H190 V110 Z"/><path d="M10 22 H178" stroke="#f00"/><line x1="0" y1="0" x2="10" y2="10"/></svg>'
+    );
+    expect(r.parts).toHaveLength(3);
+    expect(r.parts[0]).toMatchObject({ fill: "none", stroke: "#222", strokeWidth: 1 });
+    expect(r.parts[1]).toMatchObject({ fill: "none", stroke: "#f00" });
+    expect(r.parts[2]).toMatchObject({ shape: "path", fill: "none", stroke: "#222" });
+    expect(r.skipped).toBe(0);
+  });
+
   it("lehnt kaputte oder leere SVG ab", () => {
     expect(() => importSvg("kein svg")).toThrow();
     expect(() => importSvg('<svg xmlns="http://www.w3.org/2000/svg"><text>x</text></svg>')).toThrow();
