@@ -135,7 +135,53 @@ export interface FloorItem {
   glowRadius?: number;
   /** Farbe des Scheins für Lampen ohne rgb_color. */
   glowColor?: string;
+  /** Verweis auf eine Möbel-Vorlage (`plan.furniture`); Lage und Größe gelten für die ganze Vorlage. */
+  furnitureType?: string;
+  /** Drehung des Möbelstücks in Grad. */
+  rotation?: number;
+  /** Maßstab des Möbelstücks (1 = Größe der Vorlage). */
+  scale?: number;
+  /** Überschreibt die Füllfarbe aller Teile der Vorlage. */
+  fillColor?: string;
 }
+
+export type FurnitureShape = "rect" | "circle" | "polygon" | "path";
+
+/** Ein Teil einer Möbel-Vorlage; Koordinaten relativ zum Mittelpunkt des Möbelstücks. */
+export interface FurniturePart {
+  id: string;
+  shape: FurnitureShape;
+  /** Mittelpunkt (rect, circle, path) bzw. Verschiebung (polygon). */
+  x: number;
+  y: number;
+  /** rect und path: Breite und Höhe. */
+  w?: number;
+  h?: number;
+  /** circle: Radius. */
+  r?: number;
+  /** polygon: Eckpunkte relativ zu (x, y). */
+  points?: Point[];
+  /** path: SVG-Pfaddaten und deren Ursprungs-Box [minX, minY, breite, höhe]. */
+  d?: string;
+  vb?: [number, number, number, number];
+  fill?: string;
+  opacity?: number;
+  /** Beschriftungs-Icon in der Mitte des Teils. */
+  icon?: string;
+}
+
+/** Wiederverwendbare Möbel-Vorlage, planweit. */
+export interface FurnitureType {
+  id: string;
+  name: string;
+  parts: FurniturePart[];
+  /** Leuchtpunkte relativ zum Mittelpunkt: hier scheint das Licht eines platzierten Exemplars. */
+  lights?: Point[];
+}
+
+export const MAX_FURNITURE = 100;
+export const MAX_FURNITURE_PARTS = 60;
+export const DEFAULT_FURNITURE_FILL = "#9e9e9e";
 
 export const DEFAULT_GLOW_RADIUS = 150;
 export const DEFAULT_GLOW_COLOR = "#ffd9a0";
@@ -173,6 +219,8 @@ export interface Plan {
   canvas: { width: number; height: number };
   settings: PlanSettings;
   floors: Floor[];
+  /** Eigene Möbel-Bibliothek, planweit. */
+  furniture?: FurnitureType[];
 }
 
 export const DEFAULT_SETTINGS: PlanSettings = { wallThickness: 12, grid: 10 };
@@ -204,6 +252,7 @@ export function normalizePlan(raw: Partial<Plan> | undefined): Plan {
     version: plan.version ?? 1,
     canvas: plan.canvas ?? { width: 1000, height: 700 },
     settings: { ...DEFAULT_SETTINGS, ...(plan.settings ?? {}) },
+    furniture: plan.furniture ?? [],
     floors: (plan.floors ?? []).map((f) => ({
       ...f,
       name: f.name ?? "",

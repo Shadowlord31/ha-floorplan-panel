@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
   IDENTITY_ZOOM,
@@ -11,7 +12,7 @@ import {
   snapToAreaCorner,
   snapToEndpoint,
 } from "./geometry";
-import type { Area, FloorItem, Wall } from "./types";
+import type { Area, FloorItem, FurnitureType, Wall } from "./types";
 
 const rect = (x1: number, y1: number, x2: number, y2: number) => [
   { x: x1, y: y1 },
@@ -219,5 +220,78 @@ describe("Raum-Wände", () => {
     expect(roomWalls(a, [on, part, off]).map((w) => w.id)).toEqual(["a", "b"]);
     expect(wallRooms(on, [a, area("x", rect(200, 0, 300, 100))]).map((r) => r.id)).toEqual(["r"]);
     expect(wallRooms(off, [a])).toEqual([]);
+  });
+});
+
+import { findFurniture, furnitureBox, furnitureCorners, glowPoints, hasBadge, importSvg, isSafePath, itemGlows, placePoint, unplacePoint } from "./furniture";
+
+describe("Möbel", () => {
+  const lamp: FurnitureType = {
+    id: "lampe",
+    name: "Stehlampe",
+    parts: [
+      { id: "a", shape: "rect", x: 0, y: 0, w: 40, h: 20 },
+      { id: "b", shape: "circle", x: 30, y: 0, r: 10 },
+    ],
+    lights: [{ x: 30, y: 0 }],
+  };
+  const item = (o: Partial<FloorItem> = {}): FloorItem => ({ id: "i", x: 100, y: 100, furnitureType: "lampe", ...o });
+
+  it("dreht und skaliert Punkte und kehrt sie um", () => {
+    const p = placePoint(item({ rotation: 90, scale: 2 }), { x: 10, y: 0 });
+    expect(p.x).toBeCloseTo(100);
+    expect(p.y).toBeCloseTo(120);
+    const back = unplacePoint(item({ rotation: 90, scale: 2 }), p);
+    expect(back.x).toBeCloseTo(10);
+    expect(back.y).toBeCloseTo(0);
+  });
+
+  it("berechnet Box und Ecken", () => {
+    expect(furnitureBox(lamp)).toEqual({ x0: -20, y0: -10, x1: 40, y1: 10 });
+    expect(furnitureBox({ id: "x", name: "", parts: [] })).toEqual({ x0: -15, y0: -15, x1: 15, y1: 15 });
+    const c = furnitureCorners(item({ rotation: 180 }), lamp);
+    expect(c[0].x).toBeCloseTo(100 + 20 - 0);
+  });
+
+  it("leuchtet an den Leuchtpunkten, nur mit Leuchtpunkt automatisch", () => {
+    const pts = glowPoints(item({ rotation: 90 }), [lamp]);
+    expect(pts).toHaveLength(1);
+    expect(pts[0].x).toBeCloseTo(100);
+    expect(pts[0].y).toBeCloseTo(130);
+    expect(itemGlows(item({ entity: "light.a" }), [lamp])).toBe(true);
+    const plain = { ...lamp, lights: [] };
+    expect(itemGlows(item({ entity: "light.a" }), [plain])).toBe(false);
+    expect(itemGlows(item({ entity: "light.a", glow: true }), [plain])).toBe(true);
+    expect(itemGlows({ id: "f", x: 0, y: 0, entity: "light.a" }, [lamp])).toBe(true);
+    expect(glowPoints(item({ furnitureType: "weg" }), [lamp])).toEqual([{ x: 100, y: 100 }]);
+  });
+
+  it("zeigt die Plakette nur bei Entität, Icon oder Beschriftung", () => {
+    expect(hasBadge(item(), [lamp])).toBe(false);
+    expect(hasBadge(item({ entity: "light.a" }), [lamp])).toBe(true);
+    expect(hasBadge(item({ furnitureType: "weg" }), [lamp])).toBe(true);
+    expect(findFurniture([lamp], "lampe")).toBe(lamp);
+  });
+
+  it("lässt nur harmlose Pfaddaten zu", () => {
+    expect(isSafePath("M0 0 L10 10 Z")).toBe(true);
+    expect(isSafePath("M0 0 <script>")).toBe(false);
+    expect(isSafePath("")).toBe(false);
+  });
+
+  it("importiert eine einfache SVG zentriert und skaliert", () => {
+    const r = importSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect x="0" y="0" width="200" height="100" fill="#ff0000"/><circle cx="100" cy="50" r="20"/><path d="M0 0 L10 10 Z"/><text>x</text></svg>'
+    );
+    expect(r.parts.map((p) => p.shape)).toEqual(["rect", "circle", "path"]);
+    expect(r.parts[0]).toMatchObject({ x: 0, y: 0, w: 100, h: 50, fill: "#ff0000" });
+    expect(r.parts[1].r).toBe(10);
+    expect(r.parts[2]).toMatchObject({ w: 100, h: 50 });
+    expect(r.skipped).toBe(1);
+  });
+
+  it("lehnt kaputte oder leere SVG ab", () => {
+    expect(() => importSvg("kein svg")).toThrow();
+    expect(() => importSvg('<svg xmlns="http://www.w3.org/2000/svg"><text>x</text></svg>')).toThrow();
   });
 });

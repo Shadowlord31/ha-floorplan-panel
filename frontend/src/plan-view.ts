@@ -31,6 +31,7 @@ import {
   type HomeAssistant,
 } from "./ha";
 import { renderGlows } from "./light";
+import { findFurniture, furnitureStyles, hasBadge, itemFill, renderFurnitureItem } from "./furniture";
 import { planSvgStyles, renderArea, renderOpenings, renderWalls } from "./render";
 import type { Floor, FloorItem, Plan } from "./types";
 
@@ -164,6 +165,7 @@ export class FpPlanView extends LitElement {
                 })}</g>`
               )}
             </g>
+            <g class="furniture-layer">${floor.items.map((it) => this._renderFurniture(it))}</g>
             ${renderGlows(floor, this.plan, this.hass, `${this._maskId}-glow`)}
             ${renderWalls(floor, this.plan, this._maskId)} ${renderOpenings(floor, this.plan, { hass: this.hass })}
           </svg>
@@ -186,7 +188,14 @@ export class FpPlanView extends LitElement {
       : { ...zoom, txPercent: zoom.txPercent - ((POPUP_WIDTH_PX + 32) / 2 / this._box.w) * 100 };
   }
 
+  private _renderFurniture(it: FloorItem) {
+    const t = findFurniture(this.plan?.furniture, it.furnitureType);
+    if (!t) return nothing;
+    return renderFurnitureItem(it, t, { fill: itemFill(it, isActive(it.entity ? this.hass.states[it.entity] : undefined)) });
+  }
+
   private _renderItem(item: FloorItem, view: Rect) {
+    if (!hasBadge(item, this.plan?.furniture)) return nothing;
     const width = view.w;
     const height = view.h;
     const stateObj = item.entity ? this.hass.states[item.entity] : undefined;
@@ -215,6 +224,7 @@ export class FpPlanView extends LitElement {
 
   static styles = [
     unsafeCSS(planSvgStyles),
+    unsafeCSS(furnitureStyles),
     css`
       :host {
         display: block;

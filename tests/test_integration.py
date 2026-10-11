@@ -264,3 +264,43 @@ def test_schema_migrates_old_window_and_door_format() -> None:
 def test_schema_rejects_bad_opening_fields(opening: dict) -> None:
     with pytest.raises(vol.Invalid):
         validate_plan(_plan_with(opening))
+
+
+def test_schema_furniture_library_and_placed_items() -> None:
+    plan = validate_plan(
+        {
+            "furniture": [
+                {
+                    "id": "lampe",
+                    "name": "Stehlampe",
+                    "parts": [
+                        {"id": "p1", "shape": "circle", "x": 0, "y": 0, "r": 15, "fill": "#888"},
+                        {"id": "p2", "shape": "path", "x": 0, "y": 0, "w": 20, "h": 20, "d": "M0 0 L10 0 Z", "vb": [0, 0, 10, 10]},
+                    ],
+                    "lights": [{"x": 0, "y": -10}],
+                }
+            ],
+            "floors": [{"id": "eg", "items": [{"id": "i", "x": 1, "y": 2, "furnitureType": "lampe", "rotation": 90, "scale": 1.5}]}],
+        }
+    )
+    assert plan["furniture"][0]["lights"] == [{"x": 0.0, "y": -10.0}]
+    assert plan["floors"][0]["items"][0]["furnitureType"] == "lampe"
+    assert validate_plan({})["furniture"] == []
+
+
+@pytest.mark.parametrize(
+    "part",
+    [
+        {"id": "p", "shape": "path", "x": 0, "y": 0, "d": "M0 0 <script>"},
+        {"id": "p", "shape": "blob", "x": 0, "y": 0},
+        {"id": "p", "shape": "polygon", "x": 0, "y": 0, "points": [{"x": 0, "y": 0}]},
+    ],
+)
+def test_schema_rejects_bad_furniture_parts(part: dict) -> None:
+    with pytest.raises(vol.Invalid):
+        validate_plan({"furniture": [{"id": "m", "name": "M", "parts": [part]}]})
+
+
+def test_schema_rejects_duplicate_furniture_ids() -> None:
+    with pytest.raises(vol.Invalid):
+        validate_plan({"furniture": [{"id": "m", "name": "A"}, {"id": "m", "name": "B"}]})

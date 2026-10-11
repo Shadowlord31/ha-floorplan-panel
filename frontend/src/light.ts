@@ -8,6 +8,7 @@
  */
 import { svg, nothing, type SVGTemplateResult } from "lit";
 import { domainOf, isActive, type HassEntity, type HomeAssistant } from "./ha";
+import { glowPoints, itemGlows } from "./furniture";
 import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, type Floor, type FloorItem, type Opening, type Plan, type Point, type Wall } from "./types";
 
 /** Deckkraft in der Mitte des Scheins bei minimaler bzw. voller Helligkeit. */
@@ -221,9 +222,11 @@ export function shutterClosedFraction(state: HassEntity | undefined): number | u
 /** Lichtschein aller leuchtenden Icons einer Etage, an Wänden gebrochen. */
 export function renderGlows(floor: Floor, plan: Plan, hass: HomeAssistant, idPrefix: string): SVGTemplateResult | typeof nothing {
   const lit = floor.items
-    .filter((it) => it.entity && glowEnabled(it))
-    .map((it) => ({ it, paint: glowPaint(it, hass.states[it.entity!]) }))
-    .filter((x): x is { it: FloorItem; paint: GlowPaint } => !!x.paint);
+    .filter((it) => it.entity && itemGlows(it, plan.furniture))
+    .flatMap((it) => {
+      const paint = glowPaint(it, hass.states[it.entity!]);
+      return paint ? glowPoints(it, plan.furniture).map((p) => ({ it: { ...it, x: p.x, y: p.y }, paint })) : [];
+    });
   if (!lit.length) return nothing;
   const thickness = (w: Wall) => w.thickness ?? plan.settings.wallThickness;
   const walls = wallsLightPassesThrough(floor.walls, floor.openings, (o) => openingPassesLight(o, hass), thickness);

@@ -186,6 +186,48 @@ ITEM_SCHEMA = vol.Schema(
         vol.Optional("glow"): vol.Any(None, bool),
         vol.Optional("glowRadius"): vol.All(vol.Coerce(float), vol.Range(min=10, max=5000)),
         vol.Optional("glowColor"): _COLOR,
+        # Verweis auf eine Möbel-Vorlage; Drehung (Grad) und Maßstab des Exemplars
+        vol.Optional("furnitureType"): _ID,
+        vol.Optional("rotation"): vol.All(vol.Coerce(float), vol.Range(min=-720, max=720)),
+        vol.Optional("scale"): vol.All(vol.Coerce(float), vol.Range(min=0.05, max=20)),
+        vol.Optional("fillColor"): _COLOR,
+    },
+    extra=vol.REMOVE_EXTRA,
+)
+
+_POINT = vol.Schema(
+    {vol.Required("x"): _COORD, vol.Required("y"): _COORD},
+    extra=vol.REMOVE_EXTRA,
+)
+# SVG-Pfaddaten: nur Befehle und Zahlen, nie Markup
+_PATH_DATA = vol.All(str, vol.Length(min=1, max=20_000), vol.Match(r"^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]+$"))
+
+FURNITURE_PART_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("shape"): vol.In(["rect", "circle", "polygon", "path"]),
+        vol.Required("x"): _COORD,
+        vol.Required("y"): _COORD,
+        vol.Optional("w"): _POSITIVE,
+        vol.Optional("h"): _POSITIVE,
+        vol.Optional("r"): _POSITIVE,
+        vol.Optional("points"): vol.All([_POINT], vol.Length(min=3, max=200)),
+        vol.Optional("d"): _PATH_DATA,
+        vol.Optional("vb"): vol.All([_COORD], vol.Length(min=4, max=4)),
+        vol.Optional("fill"): _COLOR,
+        vol.Optional("opacity"): _OPACITY,
+        vol.Optional("icon"): _ICON,
+    },
+    extra=vol.REMOVE_EXTRA,
+)
+
+FURNITURE_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _ID,
+        vol.Required("name"): vol.All(str, vol.Length(min=1, max=100)),
+        vol.Optional("parts", default=list): vol.All([FURNITURE_PART_SCHEMA], vol.Length(max=60)),
+        # Leuchtpunkte relativ zum Mittelpunkt
+        vol.Optional("lights"): vol.All([_POINT], vol.Length(max=10)),
     },
     extra=vol.REMOVE_EXTRA,
 )
@@ -226,6 +268,8 @@ PLAN_SCHEMA = vol.Schema(
             extra=vol.REMOVE_EXTRA,
         ),
         vol.Optional("floors", default=list): vol.All([FLOOR_SCHEMA], vol.Length(max=20)),
+        # eigene Möbel-Bibliothek, planweit
+        vol.Optional("furniture", default=list): vol.All([FURNITURE_SCHEMA], vol.Length(max=100)),
         vol.Optional("settings", default=dict): vol.Schema(
             {
                 # Wanddicke in Einheiten, Standard für neue Wände
@@ -247,6 +291,13 @@ def _check_unique_ids(plan: dict[str, Any]) -> None:
     floor_ids = [f["id"] for f in plan["floors"]]
     if len(floor_ids) != len(set(floor_ids)):
         raise vol.Invalid("Etagen-IDs sind nicht eindeutig")
+    furniture_ids = [f["id"] for f in plan["furniture"]]
+    if len(furniture_ids) != len(set(furniture_ids)):
+        raise vol.Invalid("Möbel-IDs sind nicht eindeutig")
+    for furniture in plan["furniture"]:
+        part_ids = [p["id"] for p in furniture["parts"]]
+        if len(part_ids) != len(set(part_ids)):
+            raise vol.Invalid(f"Teil-IDs in {furniture['id']} sind nicht eindeutig")
     for floor in plan["floors"]:
         for key in ("walls", "openings", "areas", "items"):
             ids = [e["id"] for e in floor[key]]

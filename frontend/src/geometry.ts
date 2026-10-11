@@ -5,6 +5,7 @@
  * aus easy-floorplan (src/render.ts, MIT, Copyright (c) 2026 Nicolas Sandller) portiert –
  * ohne die dortige Plan-Drehung, die dieses Projekt nicht braucht.
  */
+import { furnitureCorners } from "./furniture";
 import type { Area, Floor, FloorItem, Plan, Point, Wall } from "./types";
 
 /** Höchster Einpass-Zoom, wenn ein Raum keinen eigenen Wert hat. */
@@ -252,7 +253,11 @@ export function contentBounds(floor: Floor, plan: Plan): Rect {
       for (const ly of [yMin, yMax]) add(o.x + lx * cos - ly * sin, o.y + lx * sin + ly * cos);
   }
   const itemMargin = long * 0.04;
-  for (const it of floor.items) add(it.x, it.y, itemMargin);
+  for (const it of floor.items) {
+    const ft = it.furnitureType ? plan.furniture?.find((f) => f.id === it.furnitureType) : undefined;
+    if (ft) for (const p of furnitureCorners(it, ft)) add(p.x, p.y);
+    else add(it.x, it.y, itemMargin);
+  }
   if (minX === Infinity) {
     const pad = long * 0.03;
     return { x: -pad, y: -pad, w: width + 2 * pad, h: height + 2 * pad };
