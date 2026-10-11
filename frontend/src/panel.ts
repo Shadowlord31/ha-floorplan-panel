@@ -6,6 +6,7 @@ import { defineElement } from "./define";
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 import "./editor";
+import "./ef-adapter";
 import type { HomeAssistant } from "./ha";
 import "./plan-view";
 import "./room-dialog";
@@ -25,6 +26,8 @@ export class FloorplanPanel extends LitElement {
   @property({ attribute: false }) panel?: { config?: { version?: string } };
 
   @state() private _plan?: Plan;
+  @state() private _raw?: Record<string, unknown>;
+  @state() private _ef: "" | "view" | "edit" = localStorage.getItem("fp-ef") === "1" ? "view" : "";
   @state() private _revision = 0;
   @state() private _floorId?: string;
   @state() private _zoomedAreaId?: string;
@@ -69,6 +72,7 @@ export class FloorplanPanel extends LitElement {
 
   private _setPlan(raw: Plan, revision: number): void {
     const plan = normalizePlan(raw);
+    this._raw = raw as unknown as Record<string, unknown>;
     this._plan = plan;
     this._revision = revision;
     if (!plan.floors.some((f) => f.id === this._floorId)) this._floorId = plan.floors[0]?.id;
@@ -134,7 +138,42 @@ export class FloorplanPanel extends LitElement {
     }
   }
 
+  private _toggleEf(): void {
+    this._ef = this._ef ? "" : "view";
+    localStorage.setItem("fp-ef", this._ef ? "1" : "0");
+  }
+
+  private _onEfSaved(ev: CustomEvent<{ plan: Plan; revision: number }>): void {
+    this._setPlan(ev.detail.plan, ev.detail.revision);
+  }
+
   protected render() {
+    if (this._ef && this._raw) {
+      return html`
+        <div class="toolbar">
+          ${this.narrow
+            ? html`<button class="icon-btn" title="Menü" @click=${this._toggleMenu}><ha-icon icon="mdi:menu"></ha-icon></button>`
+            : html`<span class="spacer"></span>`}
+          <div class="main-title">Grundriss (easy-floorplan-Port)</div>
+          ${this._isAdmin && this._ef === "view"
+            ? html`<button class="icon-btn" title="Bearbeiten" @click=${() => (this._ef = "edit")}>
+                <ha-icon icon="mdi:pencil-ruler"></ha-icon>
+              </button>`
+            : nothing}
+          <button class="icon-btn" title="Zum bisherigen Grundriss wechseln" @click=${this._toggleEf}>
+            <ha-icon icon="mdi:swap-horizontal"></ha-icon>
+          </button>
+        </div>
+        <fp-ef-host
+          .hass=${this.hass}
+          .plan=${this._raw}
+          .revision=${this._revision}
+          .edit=${this._ef === "edit"}
+          @ef-saved=${this._onEfSaved}
+          @ef-close=${() => (this._ef = "view")}
+        ></fp-ef-host>
+      `;
+    }
     if (this._editing && this._plan) {
       return html`<fp-editor
         .hass=${this.hass}
@@ -171,6 +210,9 @@ export class FloorplanPanel extends LitElement {
               )}
             </div>`
           : nothing}
+        <button class="icon-btn" title="Zum easy-floorplan-Port wechseln" @click=${this._toggleEf}>
+          <ha-icon icon="mdi:swap-horizontal"></ha-icon>
+        </button>
         ${this._isAdmin && plan
           ? html`<button class="icon-btn" title="Grundriss bearbeiten" @click=${() => this._openEditor()}>
               <ha-icon icon="mdi:pencil-ruler"></ha-icon>
@@ -240,6 +282,9 @@ export class FloorplanPanel extends LitElement {
     }
     .spacer {
       width: 8px;
+    }
+    fp-ef-host {
+      flex: 1;
     }
     fp-editor {
       flex: 1;

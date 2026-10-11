@@ -605,6 +605,14 @@ export class FloorplanCard extends LitElement {
   /** Tapping a room zooms the plan in to it; tapping the same room again zooms back out. */
   private _onAreaClick(a: Area): void {
     this._zoomedAreaId = this._zoomedAreaId === a.id ? undefined : a.id;
+    // floorplan-panel: lets the host open its room sidebar
+    this.dispatchEvent(
+      new CustomEvent("fp-area-tap", {
+        detail: { areaId: a.id, floorId: this._activeFloorId, zoomed: this._zoomedAreaId === a.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**

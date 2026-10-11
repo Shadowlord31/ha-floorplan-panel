@@ -11,6 +11,7 @@ Koordinaten sind virtuelle Einheiten (empfohlen: Zentimeter) auf der Leinwand
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import voluptuous as vol
@@ -259,6 +260,16 @@ FLOOR_SCHEMA = vol.Schema(
     extra=vol.REMOVE_EXTRA,
 )
 
+EF_MAX_BYTES = 2_000_000
+
+
+def _ef_size(value: dict[str, Any]) -> dict[str, Any]:
+    """Begrenzt die Größe der Port-Konfiguration."""
+    if len(json.dumps(value, default=str)) > EF_MAX_BYTES:
+        raise vol.Invalid("Die Konfiguration des Editors ist zu groß")
+    return value
+
+
 PLAN_SCHEMA = vol.Schema(
     {
         vol.Optional("version", default=PLAN_FORMAT_VERSION): vol.All(int, vol.Range(min=1, max=PLAN_FORMAT_VERSION)),
@@ -272,6 +283,8 @@ PLAN_SCHEMA = vol.Schema(
         vol.Optional("floors", default=list): vol.All([FLOOR_SCHEMA], vol.Length(max=20)),
         # eigene Möbel-Bibliothek, planweit
         vol.Optional("furniture", default=list): vol.All([FURNITURE_SCHEMA], vol.Length(max=100)),
+        # unveränderte Karten-Konfiguration des easy-floorplan-Ports (siehe NOTICE.md)
+        vol.Optional("ef"): vol.All(dict, _ef_size),
         vol.Optional("settings", default=dict): vol.Schema(
             {
                 # Wanddicke in Einheiten, Standard für neue Wände
