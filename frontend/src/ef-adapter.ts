@@ -12,7 +12,9 @@ import { property, state } from "lit/decorators.js";
 import { defineElement } from "./define";
 import "./ef/floorplan-card";
 import "./ef/editor";
+import "./room-dialog";
 import type { HomeAssistant } from "./ha";
+import type { Area as PanelArea } from "./types";
 
 const DOMAIN = "floorplan_panel";
 const SAVE_DELAY_MS = 800;
@@ -39,6 +41,7 @@ export class EfHost extends LitElement {
 
   @state() private _status: "" | "saving" | "saved" | "error" = "";
   @state() private _error = "";
+  @state() private _room?: PanelArea;
 
   private _pending?: EfConfig;
   private _timer?: ReturnType<typeof setTimeout>;
@@ -123,6 +126,14 @@ export class EfHost extends LitElement {
     }
   }
 
+  private _onAreaTap = (ev: Event): void => {
+    const { areaId, zoomed } = (ev as CustomEvent<{ areaId: string; zoomed: boolean }>).detail;
+    const cfg = this.plan?.ef as { floors?: { areas?: any[] }[]; areas?: any[] } | undefined;
+    const lists = [...(cfg?.floors ?? []).map((f) => f.areas ?? []), cfg?.areas ?? []];
+    const a = zoomed ? lists.flat().find((x) => x?.id === areaId) : undefined;
+    this._room = a && a.sidebar?.length ? { ...a, name: a.name ?? "", sidebar: a.sidebar } : undefined;
+  };
+
   private async _close(): Promise<void> {
     if (this._pending) {
       try {
@@ -135,7 +146,11 @@ export class EfHost extends LitElement {
   }
 
   protected render() {
-    if (!this.edit) return html`<fp-ef-card></fp-ef-card>`;
+    if (!this.edit)
+      return html`<fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
+        ${this._room
+          ? html`<fp-room-dialog .hass=${this.hass} .area=${this._room} @close=${() => (this._room = undefined)}></fp-room-dialog>`
+          : nothing}`;
     return html`
       <div class="bar">
         <button @click=${this._close}>Fertig</button>
@@ -150,6 +165,7 @@ export class EfHost extends LitElement {
 
   static styles = css`
     :host {
+      position: relative;
       display: flex;
       flex-direction: column;
       min-height: 0;

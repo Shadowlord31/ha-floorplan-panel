@@ -130,3 +130,11 @@ auf eine Zeile öffnet den HA-Detaildialog (more-info).
 | `floorplan_panel/plan/load_sample` | Admin | Beispiel-Grundriss laden |
 | `floorplan_panel/history/list` / `restore` | Admin | Verlauf |
 | `floorplan_panel/subscribe` | alle | Ereignisse: `plan_updated`, `show_room`, `reset_view` |
+
+## Port-Modus (`plan.ef`)
+
+Seit v0.13.0 gibt es im Panel einen zweiten Modus auf Basis des Quellcodes von easy-floorplan (siehe `NOTICE.md`). Seine Konfiguration liegt unverändert als Objekt unter `plan.ef` (höchstens 2 MB). Eigene Ergänzungen an den Räumen der Konfiguration:
+
+- `type` (`room`, `balcony`, `hallway`, `staircase`, `bathroom`, `custom`) und `typeLabel` bei `custom`; Balkone werden gestrichelt gezeichnet.
+- `sidebar`: Liste `{entity, name?, icon?}`; ein Tipp auf den Raum öffnet sie im Popup.
+- Rechteck-Werkzeug im Raum-Modus des Editors.

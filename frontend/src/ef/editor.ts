@@ -164,6 +164,7 @@ import {
 } from "./editor-geometry";
 import { FrameCoalescer, rafScheduler } from "./frame-coalescer";
 import { applyCardConfig } from "./editor-save";
+import "../ef-area-extras";
 import type { AreaEntityScope } from "./editor-forms";
 import {
   furnitureChoices,
@@ -351,6 +352,8 @@ export class FloorplanCardEditor extends LitElement {
    * While the Area tool is active, the polygon being built up click by click.
    * Closed by clicking back on `points[0]` once at least 3 points are placed.
    */
+  /** floorplan-panel: room tool draws polygons or drags out a rectangle. */
+  @state() private _areaShape: "polygon" | "rect" = "polygon";
   @state() private _draftArea: { points: AreaPoint[] } | null = null;
   /** Live cursor position while drawing an Area, for the rubber-band preview segment. */
   @state() private _areaHover: AreaPoint | null = null;
@@ -1251,6 +1254,15 @@ export class FloorplanCardEditor extends LitElement {
       this._capturePointer(ev);
       return;
     }
+    if (this._tool === "area" && this._areaShape === "rect") {
+      // floorplan-panel: drag out a rectangle (reuses the tracker's drag draft)
+      const x = this._snap(raw.x);
+      const y = this._snap(raw.y);
+      this._draftTracker = { x0: x, y0: y, x1: x, y1: y };
+      this._gesturePointer = ev.pointerId;
+      this._capturePointer(ev);
+      return;
+    }
     if (this._tool === "area") {
       // Discrete clicks, like door/window — no drag capture/gesture pointer.
       const pt = this._snapAreaPoint(raw.x, raw.y);
@@ -1340,7 +1352,7 @@ export class FloorplanCardEditor extends LitElement {
       this._draft = { ...this._draft, x2: s.x, y2: s.y };
       return;
     }
-    if (this._tool === "tracker" && this._draftTracker) {
+    if ((this._tool === "tracker" || this._tool === "area") && this._draftTracker) {
       const raw = this._toVirtual(ev, false);
       this._draftTracker = {
         ...this._draftTracker,
@@ -1378,7 +1390,7 @@ export class FloorplanCardEditor extends LitElement {
       }
       return;
     }
-    if (this._tool === "tracker" && this._draftTracker) {
+    if ((this._tool === "tracker" || this._tool === "area") && this._draftTracker) {
       const d = this._draftTracker;
       this._draftTracker = null;
       this._releasePointer(ev);
@@ -1389,7 +1401,8 @@ export class FloorplanCardEditor extends LitElement {
       // Reject zero-size drags (a stray click) so the tool doesn't litter the
       // canvas with invisible trackers.
       if (w >= this.grid / 2 && h >= this.grid / 2) {
-        this._addTracker(x, y, w, h);
+        if (this._tool === "area") this._addRectArea(x, y, w, h);
+        else this._addTracker(x, y, w, h);
       }
       return;
     }
@@ -1752,6 +1765,23 @@ export class FloorplanCardEditor extends LitElement {
     };
     this._commitFloor({ trackers: [...(this._floor().trackers ?? []), tr] });
     this._selection = [{ kind: "tracker", id: tr.id }];
+    this._tool = "select";
+  }
+
+  /** floorplan-panel: a rectangular room from a dragged box. */
+  private _addRectArea(x: number, y: number, w: number, h: number): void {
+    const area: Area = {
+      id: uid("area"),
+      points: [
+        { x, y },
+        { x: x + w, y },
+        { x: x + w, y: y + h },
+        { x, y: y + h },
+      ],
+      showName: true,
+    };
+    this._commitFloor({ areas: [...(this._floor().areas ?? []), area] });
+    this._selection = [{ kind: "area", id: area.id }];
     this._tool = "select";
   }
 
@@ -2970,8 +3000,14 @@ export class FloorplanCardEditor extends LitElement {
       label = "Area";
       const n = this._draftArea?.points.length ?? 0;
       body = html`
+        <span class="shape-toggle">
+          <button class=${this._areaShape === "polygon" ? "on" : ""} @click=${() => { this._areaShape = "polygon"; this._draftTracker = null; }}>Polygon</button>
+          <button class=${this._areaShape === "rect" ? "on" : ""} @click=${() => { this._areaShape = "rect"; this._draftArea = null; this._areaHover = null; }}>Rectangle</button>
+        </span>
         <span class="ctx-hint">
-          ${n === 0
+          ${this._areaShape === "rect"
+            ? "Drag on the canvas to draw a rectangular room."
+            : n === 0
             ? "Click to start a room outline; points snap to nearby corners."
             : n < 3
               ? `${n} point${n === 1 ? "" : "s"} placed — click to add more (3+ to close).`
@@ -5284,6 +5320,14 @@ export class FloorplanCardEditor extends LitElement {
           this._renderForm(formSlice(aSpec, ["showName", "labelSize"]), aApply)
         )}
         ${this._renderGroup(
+          "Room type & sidebar",
+          html`<fp-ef-area-extras
+            .hass=${this.hass}
+            .area=${a}
+            @area-patch=${(e: CustomEvent<Record<string, unknown>>) => aApply(e.detail, false)}
+          ></fp-ef-area-extras>`
+        )}
+        ${this._renderGroup(
           "What it reads",
           this._renderForm(formSlice(aSpec, ["entity"]), aApply)
         )}
@@ -5728,6 +5772,18 @@ export class FloorplanCardEditor extends LitElement {
       padding-right: 8px;
       margin-right: 2px;
       border-right: 1px solid var(--divider-color, #e0e0e0);
+    }
+    .shape-toggle button {
+      font: inherit;
+      border: 1px solid var(--divider-color);
+      background: none;
+      color: inherit;
+      padding: 2px 10px;
+      cursor: pointer;
+    }
+    .shape-toggle button.on {
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
     }
     .context-bar .ctx-hint {
       font-size: 12px;

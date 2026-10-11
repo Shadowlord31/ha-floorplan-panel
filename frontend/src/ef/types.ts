@@ -1108,6 +1108,12 @@ export interface AreaPoint {
  */
 export interface Area {
   id: string;
+  /** floorplan-panel: room type ("room" | "balcony" | "hallway" | "staircase" | "bathroom" | "custom"). */
+  type?: string;
+  /** floorplan-panel: free label when type is "custom". */
+  typeLabel?: string;
+  /** floorplan-panel: entities shown in the room sidebar. */
+  sidebar?: { entity: string; name?: string; icon?: string }[];
   /** Vertices in drawing order, virtual canvas units. Implicitly closed (last -> first). */
   points: AreaPoint[];
   /** Display name. Mirrors the linked HA area's name when `haArea` is set. */

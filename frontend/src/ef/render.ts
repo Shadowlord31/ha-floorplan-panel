@@ -4873,8 +4873,9 @@ export function renderArea(a: Area, liveColor?: string): SVGTemplateResult {
                        points=${pts}
                        fill=${liveFill ? liveColor : cssColorOr(a.color, SKIN_ACCENT)}
                        fill-opacity=${cssNumber(opacity, DEFAULT_AREA_OPACITY)}
-                       stroke="none"
-                       stroke-width="0" />`;
+                       stroke=${a.type === "balcony" ? cssColorOr(a.color, SKIN_ACCENT) : "none"}
+                       stroke-width=${a.type === "balcony" ? 3 : 0}
+                       stroke-dasharray=${a.type === "balcony" ? "10 6" : nothing} />`;
 }
 
 /**
