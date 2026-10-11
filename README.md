@@ -7,6 +7,7 @@ Sidebar-Panel** anzeigt – kein Dashboard, keine Lovelace-Card.
   Geräten, Szenen und Skripten, die diesem Raum **explizit zugeordnet** sind
   (keine automatische Übernahme aller Area-Entitäten).
 - Steuerung direkt aus dem Popup (Schalten, Szene/Skript starten, Detaildialog).
+- Eigene Möbel-Bibliothek: Im Möbel-Editor aus Rechtecken, Kreisen, Polygonen und importierten SVGs Vorlagen bauen, im Grundriss platzieren, drehen und skalieren. Leuchtpunkte lassen Lampen-Möbel genau dort leuchten.
 - Freie Icon-Platzierung auf dem Grundriss: beliebiges `mdi:`-Icon, Entität optional,
   kein Möbel-/Formkatalog.
 - Fenster mit bis zu 4 Flügeln (Breite und optionaler Sensor je Flügel), offen mit

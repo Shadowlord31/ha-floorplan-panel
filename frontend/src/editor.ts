@@ -9,6 +9,8 @@ import { defineElement } from "./define";
 import { LitElement, css, html, nothing, svg, unsafeCSS, type PropertyValues, type TemplateResult } from "lit";
 import { property, query, state } from "lit/decorators.js";
 import "./entity-picker";
+import "./furniture-editor";
+import { furnitureBox, renderPart, findFurniture, furnitureCorners, glowPoints, hasBadge, itemFill, itemGlows, renderFurnitureItem, furnitureStyles } from "./furniture";
 import {
   alignSnap,
   autoPlace,
@@ -32,7 +34,7 @@ import {
   type Rect,
 } from "./geometry";
 import { domainOf, entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
-import { glowEnabled, glowReach, openingPassesLight, wallsLightPassesThrough } from "./light";
+import { glowReach, openingPassesLight, wallsLightPassesThrough } from "./light";
 import { maxWallThickness, planSvgStyles, renderArea, renderOpening, renderWalls, wallThickness } from "./render";
 import { DEFAULT_GLOW_COLOR, DEFAULT_GLOW_RADIUS, DEFAULT_OPEN_COLOR, DEFAULT_SHUTTER_COLOR, newId, normalizePlan, AREA_TYPES, type Area, type Floor, type FloorItem, type Leaf, type Opening, type Plan, type Point, type Shutter, type ShutterSide, type Template, type Wall, MAX_LEAVES, MAX_TEMPLATES } from "./types";
 import { leafSegments, setLeafCount, setLeafWidth, windowLeaves, windowMissingSensor } from "./openings";
@@ -45,7 +47,7 @@ const SNAP_PX = 12;
 const ITEM_RADIUS_PX = 14;
 const HANDLE_RADIUS_PX = 7;
 
-type Tool = "select" | "marquee" | "wall" | "area" | "rect" | "wallrect" | "door" | "window" | "item";
+type Tool = "select" | "marquee" | "wall" | "area" | "rect" | "wallrect" | "door" | "window" | "item" | "furniture";
 type Kind = "wall" | "opening" | "area" | "item";
 interface Selection {
   kind: Kind;
@@ -112,6 +114,7 @@ const TOOLS: { id: Tool; icon: string; label: string; hint: string }[] = [
   { id: "rect", icon: "mdi:vector-rectangle", label: "Raum (Rechteck)", hint: "Von Ecke zu Ecke ziehen: legt Raumfläche und die vier Wände in einem Zug an. Alt: ohne Raster/Fang, Esc bricht ab." },
   { id: "door", icon: "mdi:door", label: "Tür", hint: "Auf eine Wand klicken, um dort eine Tür einzusetzen." },
   { id: "window", icon: "mdi:window-closed-variant", label: "Fenster", hint: "Auf eine Wand klicken, um dort ein Fenster einzusetzen." },
+  { id: "furniture", icon: "mdi:sofa-outline", label: "Möbel", hint: "Vorlage rechts aus der Bibliothek wählen, dann auf den Plan klicken. Danach verschieben, drehen und skalieren. Neue Vorlagen baust du über „Möbel-Bibliothek“ oben." },
   { id: "item", icon: "mdi:map-marker-plus", label: "Icon", hint: "Klick platziert ein freies Icon – Icon und Entität danach rechts wählen." },
 ];
 
@@ -158,6 +161,9 @@ export class FpEditor extends LitElement {
   @state() private _draft!: Plan;
   @state() private _floorId!: string;
   @state() private _tool: Tool = "select";
+  @state() private _furnMode = false;
+  @state() private _furnOpen?: string;
+  @state() private _placeType?: string;
   @state() private _sel?: Selection;
   /** Mehrfachauswahl (inkl. `_sel`), nur gültig bei mehr als einem Element. */
   @state() private _multi: Selection[] = [];
@@ -788,6 +794,16 @@ export class FpEditor extends LitElement {
       case "window":
         this._placeOpening(this._tool, p, ev);
         break;
+      case "furniture": {
+        const t = findFurniture(this._draft.furniture, this._placeType);
+        if (!t) break;
+        const sp = this._snap(p, ev);
+        const id = newId("i");
+        this._mutate((f) => f.items.push({ id, x: sp.x, y: sp.y, furnitureType: t.id, tapAction: "auto" } as FloorItem));
+        this._sel = { kind: "item", id };
+        this._tool = "select";
+        break;
+      }
       case "item": {
         const sp = this._snap(p, ev);
         const id = newId("i");
@@ -802,7 +818,7 @@ export class FpEditor extends LitElement {
   private _onPointerMove(ev: PointerEvent): void {
     this._lastGuides = [];
     this._onPointerMoveInner(ev);
-    if (!this._drag && this._cursor && ["wall", "rect", "wallrect", "area", "item"].includes(this._tool)) this._snap(this._cursor, ev);
+    if (!this._drag && this._cursor && ["wall", "rect", "wallrect", "area", "item", "furniture"].includes(this._tool)) this._snap(this._cursor, ev);
     this._setGuides(this._lastGuides);
   }
 
@@ -1116,6 +1132,22 @@ export class FpEditor extends LitElement {
     this._tool = "select";
   }
 
+  private _onFurnitureChange(ev: CustomEvent<{ furniture: import("./types").FurnitureType[] }>): void {
+    ev.stopPropagation();
+    this._pushUndo(this._snapshot());
+    this._draft = { ...this._draft, furniture: ev.detail.furniture };
+  }
+
+  private _closeFurniture(): void {
+    this._furnMode = false;
+    this._furnOpen = undefined;
+  }
+
+  private _editTemplate(id: string): void {
+    this._furnOpen = id;
+    this._furnMode = true;
+  }
+
   private _setTool(tool: Tool): void {
     this._tool = tool;
     this._chainStart = undefined;
@@ -1127,10 +1159,23 @@ export class FpEditor extends LitElement {
   protected render() {
     if (!this._draft) return nothing;
     const tool = TOOLS.find((t) => t.id === this._tool)!;
+    if (this._furnMode)
+      return html`<fp-furniture-editor
+        style="height:100%"
+        .plan=${this._draft}
+        .hass=${this.hass}
+        .openId=${this._furnOpen}
+        @furniture-change=${this._onFurnitureChange}
+        @close-furniture=${this._closeFurniture}
+        @edit-left=${() => (this._furnOpen = undefined)}
+      ></fp-furniture-editor>`;
     return html`
       <div class="toolbar">
         <button class="icon-btn" title="Schließen" @click=${this._close}><ha-icon icon="mdi:close"></ha-icon></button>
         <div class="main-title">Grundriss bearbeiten${this._dirty ? html`<span class="dirty"> • ungespeichert</span>` : nothing}</div>
+        <button class="chip-top" title="Eigene Möbel-Vorlagen bauen und verwalten" @click=${() => ((this._furnOpen = undefined), (this._furnMode = true))}>
+          <ha-icon icon="mdi:sofa-outline"></ha-icon>Möbel-Bibliothek
+        </button>
         <button class="icon-btn" title="Rückgängig (Strg+Z)" ?disabled=${!this._undo.length} @click=${this._doUndo}>
           <ha-icon icon="mdi:undo"></ha-icon>
         </button>
@@ -1255,6 +1300,7 @@ export class FpEditor extends LitElement {
           (o) => svg`<g data-kind="opening" data-id=${o.id}>${renderOpening(o, cut, { selected: sel?.kind === "opening" && sel.id === o.id, forceOpen: sel?.kind === "opening" && sel.id === o.id, warn: windowMissingSensor(o), leafIndex: sel?.kind === "opening" && sel.id === o.id ? (this._leafSel ?? undefined) : undefined })}</g>`
         )}
       </g>
+      <g class="furniture-layer">${floor.items.map((it) => this._renderFurniture(it))}</g>
       <g class="items">${floor.items.map((it) => this._renderItem(it, upp))}</g>
       ${this._renderSelectionOverlay(upp)}
       ${this._renderDrawPreview(upp)}
@@ -1262,7 +1308,20 @@ export class FpEditor extends LitElement {
     `;
   }
 
+  private _renderFurniture(it: FloorItem) {
+    const t = findFurniture(this._draft.furniture, it.furnitureType);
+    if (!t) return nothing;
+    const selected = (this._sel?.kind === "item" && this._sel.id === it.id) || this._multi.some((s) => s.kind === "item" && s.id === it.id);
+    const active = !!it.entity && !!it.activeColor && ["on", "open", "home"].includes(this.hass?.states?.[it.entity]?.state ?? "");
+    const pts = furnitureCorners(it, t).map((p) => `${p.x},${p.y}`).join(" ");
+    return svg`<g>
+      ${renderFurnitureItem(it, t, { selected, fill: itemFill(it, active) })}
+      <polygon class="furn-hit" data-kind="item" data-id=${it.id} points=${pts}></polygon>
+    </g>`;
+  }
+
   private _renderItem(it: FloorItem, upp: number) {
+    if (!hasBadge(it, this._draft.furniture)) return nothing;
     const r = ((it.size ?? 34) / 34) * ITEM_RADIUS_PX * upp;
     const selected = this._sel?.kind === "item" && this._sel.id === it.id;
     const icon = it.icon ?? (it.entity ? entityIcon(this.hass, it.entity) : "mdi:map-marker");
@@ -1312,15 +1371,17 @@ export class FpEditor extends LitElement {
     }
     const el = this._findSelected();
     if (!el || !this._sel) return nothing;
-    if (this._sel.kind === "item" && glowEnabled(el as FloorItem)) {
+    if (this._sel.kind === "item" && itemGlows(el as FloorItem, this._draft.furniture)) {
       const it = el as FloorItem;
       const r = it.glowRadius ?? DEFAULT_GLOW_RADIUS;
       const thickness = (w: Wall) => wallThickness(w, this._draft);
       const walls = wallsLightPassesThrough(this._floor.walls, this._floor.openings, (o) => openingPassesLight(o), thickness);
-      const reach = glowReach(it.x, it.y, r, walls, thickness);
-      return reach
-        ? svg`<polygon class="glow-reach" points=${reach.map((p) => `${p.x},${p.y}`).join(" ")} stroke-width=${1.5 * upp}></polygon>`
-        : svg`<circle class="glow-reach" cx=${it.x} cy=${it.y} r=${r} stroke-width=${1.5 * upp}></circle>`;
+      return svg`${glowPoints(it, this._draft.furniture).map((gp) => {
+        const reach = glowReach(gp.x, gp.y, r, walls, thickness);
+        return reach
+          ? svg`<polygon class="glow-reach" points=${reach.map((p) => `${p.x},${p.y}`).join(" ")} stroke-width=${1.5 * upp}></polygon>`
+          : svg`<circle class="glow-reach" cx=${gp.x} cy=${gp.y} r=${r} stroke-width=${1.5 * upp}></circle>`;
+      })}`;
     }
     const hr = HANDLE_RADIUS_PX * upp;
     if (this._sel.kind === "wall") {
@@ -1392,6 +1453,12 @@ export class FpEditor extends LitElement {
       if (!hit) return nothing;
       return svg`<circle class="cursor-dot" cx=${hit.point.x} cy=${hit.point.y} r=${5 * upp}></circle>`;
     }
+    if (this._tool === "furniture") {
+      const t = findFurniture(this._draft.furniture, this._placeType);
+      if (!t) return nothing;
+      const sp = this._snap(c, fake);
+      return svg`<g opacity=".6">${renderFurnitureItem({ id: "", x: sp.x, y: sp.y } as FloorItem, t, {})}</g>`;
+    }
     if (this._tool === "item") {
       const sp = this._snap(c, fake);
       return svg`<circle class="preview-item" cx=${sp.x} cy=${sp.y} r=${ITEM_RADIUS_PX * upp}></circle>`;
@@ -1401,7 +1468,26 @@ export class FpEditor extends LitElement {
 
   // ---------------------------------------------------------------- Eigenschaften
 
+  private _renderPicker(): TemplateResult {
+    const list = this._draft.furniture ?? [];
+    return html`
+      <div class="props-head"><h3>Möbel platzieren</h3></div>
+      ${list.length
+        ? html`<div class="furn-picker">${list.map((t) => {
+            const b = furnitureBox(t);
+            const pad = Math.max(b.x1 - b.x0, b.y1 - b.y0) * 0.1 + 2;
+            return html`<button class="furn-pick ${this._placeType === t.id ? "active" : ""}" title=${t.name} @click=${() => (this._placeType = t.id)}>
+              <svg viewBox="${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + 2 * pad} ${b.y1 - b.y0 + 2 * pad}"><g class="furniture">${t.parts.map((p) => renderPart(p))}</g></svg>
+              <span>${t.name}</span>
+            </button>`;
+          })}</div>`
+        : html`<p class="muted">Die Bibliothek ist leer. Über „Möbel-Bibliothek“ oben baust du eigene Vorlagen.</p>`}
+      <button class="chip" @click=${() => ((this._furnOpen = undefined), (this._furnMode = true))}><ha-icon icon="mdi:sofa-outline"></ha-icon>Möbel-Bibliothek öffnen</button>
+    `;
+  }
+
   private _renderProps(): TemplateResult {
+    if (this._tool === "furniture") return this._renderPicker();
     if (this._multi.length > 1) return this._renderMultiProps();
     if (!this._sel && this._wallRoomPts()) {
       const r = axisRect(this._wallRoomPts()!);
@@ -1988,8 +2074,38 @@ export class FpEditor extends LitElement {
     });
   }
 
+  private _renderFurnitureProps(it: FloorItem) {
+    const list = this._draft.furniture ?? [];
+    const t = findFurniture(list, it.furnitureType);
+    const rot = (d: number) => this._setProp("rotation", ((((it.rotation ?? 0) + d) % 360) + 360) % 360);
+    return html`
+      <label class="field">
+        <span>Vorlage</span>
+        <select @change=${(ev: Event) => this._setProp("furnitureType", (ev.target as HTMLSelectElement).value)}>
+          ${t ? nothing : html`<option value="" selected>${it.furnitureType ? "(gelöscht)" : "keine"}</option>`}
+          ${list.map((x) => html`<option value=${x.id} ?selected=${x.id === it.furnitureType}>${x.name}</option>`)}
+        </select>
+      </label>
+      ${t ? html`<button class="chip" @click=${() => this._editTemplate(t.id)}><ha-icon icon="mdi:pencil-outline"></ha-icon>Vorlage bearbeiten</button>` : nothing}
+      <div class="grid2">
+        ${this._num("Drehung (°)", "rotation", it.rotation, { min: -720, max: 720, step: 5, placeholder: "0" })}
+        ${this._num("Skalierung", "scale", it.scale, { min: 0.05, max: 20, step: 0.1, placeholder: "1" })}
+      </div>
+      <div class="row-btns">
+        <button class="chip" @click=${() => rot(-90)}><ha-icon icon="mdi:rotate-left"></ha-icon>−90°</button>
+        <button class="chip" @click=${() => rot(90)}><ha-icon icon="mdi:rotate-right"></ha-icon>+90°</button>
+      </div>
+      ${this._color("Farbe (überschreibt Vorlage)", "fillColor", it.fillColor, "#9e9e9e")}
+      ${t?.lights?.length
+        ? html`<p class="muted">Die Vorlage hat ${t.lights.length} Leuchtpunkt${t.lights.length > 1 ? "e" : ""}. Mit einer Licht-Entität scheint das Licht genau dort.</p>`
+        : nothing}
+      <h4>Icon / Entität</h4>
+    `;
+  }
+
   private _renderItemProps(it: FloorItem) {
     return html`
+      ${it.furnitureType ? this._renderFurnitureProps(it) : nothing}
       <div class="field">
         <span>Icon</span>
         <div class="icon-input">
@@ -2025,10 +2141,10 @@ export class FpEditor extends LitElement {
       ${this._check("Zustand anzeigen", "showState", it.showState)}
       <h4>Lichtschein</h4>
       <label class="check">
-        <input type="checkbox" .checked=${glowEnabled(it)} @change=${(ev: Event) => this._setProp("glow", (ev.target as HTMLInputElement).checked)} />
+        <input type="checkbox" .checked=${itemGlows(it, this._draft.furniture)} @change=${(ev: Event) => this._setProp("glow", (ev.target as HTMLInputElement).checked)} />
         <span>Lichtschein anzeigen${it.glow === undefined || it.glow === null ? " (automatisch)" : ""}</span>
       </label>
-      ${glowEnabled(it)
+      ${itemGlows(it, this._draft.furniture)
         ? html`<div class="grid2">
               ${this._num("Radius", "glowRadius", it.glowRadius, { min: 10, max: 5000, step: 10, placeholder: String(DEFAULT_GLOW_RADIUS) })}
               ${this._color("Farbe ohne RGB", "glowColor", it.glowColor, DEFAULT_GLOW_COLOR)}
@@ -2182,6 +2298,15 @@ export class FpEditor extends LitElement {
 
   static styles = [
     unsafeCSS(planSvgStyles),
+    unsafeCSS(furnitureStyles),
+    css`
+      .furn-hit { fill: transparent; pointer-events: all; cursor: move; }
+      .furn-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+      .furn-pick { display: flex; flex-direction: column; align-items: center; gap: 2px; border: 1px solid var(--divider-color); border-radius: 8px; background: none; padding: 6px; cursor: pointer; font-size: 11px; color: var(--primary-text-color); }
+      .furn-pick.active { border-color: var(--primary-color); outline: 2px solid var(--primary-color); }
+      .furn-pick svg { width: 100%; height: 56px; }
+      .chip-top { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.6); border-radius: 16px; background: none; color: inherit; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 13px; --mdc-icon-size: 18px; }
+    `,
     css`
       :host {
         display: flex;

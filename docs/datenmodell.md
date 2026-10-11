@@ -61,6 +61,30 @@ spiegelt die Typen in `frontend/src/types.ts`.
 }
 ```
 
+## Möbel-Bibliothek
+
+Planweit gibt es `plan.furniture`, eine Liste eigener Vorlagen (leer ab Werk, es wird nichts mitgeliefert):
+
+```jsonc
+"furniture": [
+  {
+    "id": "m_ab12",
+    "name": "Stehlampe",
+    "parts": [                         // Teile um den Ursprung (0/0), Einheit cm
+      { "id": "p1", "shape": "circle", "x": 0, "y": 0, "r": 15, "fill": "#444", "opacity": 1, "icon": "mdi:floor-lamp" },
+      { "id": "p2", "shape": "rect", "x": 0, "y": 0, "w": 40, "h": 10 },
+      { "id": "p3", "shape": "polygon", "x": 0, "y": 0, "points": [{"x": -10, "y": 0}, {"x": 10, "y": 0}, {"x": 0, "y": 10}] },
+      { "id": "p4", "shape": "path", "x": 0, "y": 0, "w": 50, "h": 50, "d": "M0 0L10 0L10 10Z", "vb": [0, 0, 10, 10] }
+    ],
+    "lights": [{ "x": 0, "y": -20 }]   // optionale Leuchtpunkte
+  }
+]
+```
+
+`shape: "path"` entsteht beim SVG-Import. Die Pfaddaten werden beim Import und im Schema streng geprüft (nur Zeichnungsbefehle und Zahlen, höchstens 20000 Zeichen). Abweichung von der Spezifikation: Importierte SVGs liegen als Pfaddaten inline im Plan statt als statische Dateien, damit sie mit dem Plan versioniert werden und ohne zusätzliche Dateizugriffe funktionieren.
+
+Ein platziertes Möbelstück ist ein normales Item mit `furnitureType` (Verweis auf die Vorlage), `rotation` (Grad), `scale` und optional `fillColor`. Optional `entity`, `icon`, `label`. Hat die Vorlage Leuchtpunkte und ist die Entität ein `light.*`, scheint das Licht an genau diesen Punkten (mit Drehung/Skalierung umgerechnet) nach den bekannten Regeln für Wände und Öffnungen. Ohne Leuchtpunkte färbt eine Entität nur das Möbelstück. Wird eine Vorlage gelöscht, zeigt das Exemplar nur noch sein Icon.
+
 ## Unterschiede zu easy-floorplan
 
 | easy-floorplan | Floorplan Panel |
