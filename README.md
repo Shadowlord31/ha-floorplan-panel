@@ -55,7 +55,7 @@ Grundriss bleibt erhalten.
 - Mit dem Stift-Symbol oben rechts öffnet sich der **Editor**: zeichnen, Entitäten zuordnen, pro Raum die
   Seitenleiste pflegen; „Import“ übernimmt die Konfiguration einer vorhandenen easy-floorplan-Karte als Entwurf.
 - **Übersicht-Karten:** Ohne aktiven Raum zeigt die feste Seitenleiste eine Raumliste. Administratoren pflegen dort über „Übersicht-Karten" eine Liste von Lovelace-Karten (`settings.sidebarCards`): Typ aus einer kuratierten Liste oder Custom Card wählen, mit dem Editor der Karte bearbeiten (YAML nur als Fallback), umsortieren, entfernen.
-- **Kiosk-Modus:** `<Panel-URL>?kiosk` blendet die Kopfzeile samt Menü- und Bearbeiten-Knopf aus; Grundriss und Seitenleiste füllen den Bildschirm. Die HA-eigene Seitenleiste bleibt Sache von HA bzw. Fully Kiosk.
+- **Kiosk-Modus:** `<Panel-URL>?kiosk` blendet die Kopfzeile samt Menü- und Bearbeiten-Knopf aus; Grundriss und Seitenleiste füllen den Bildschirm. Auch die HA-eigene Seitenleiste wird ausgeblendet (solange das Panel offen ist).
 - Pro Raum legen Sie fest, welche Geräte, Szenen und Skripte im Popup erscheinen.
 - Der Plan wird in `.storage/floorplan_panel.plan` gespeichert und ist Teil Ihres
   Home-Assistant-Backups.

@@ -36,13 +36,29 @@ export class FloorplanPanel extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     this.kiosk = new URLSearchParams(location.search).has("kiosk");
+    if (this.kiosk) this._hideHaSidebar(true);
     if (this.hass && !this._plan) this._load();
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    if (this.kiosk) this._hideHaSidebar(false);
     this._unsub?.();
     this._unsub = undefined;
+  }
+
+  /** Kiosk: HAs eigene Seitenleiste ausblenden (Stil in home-assistant-main, wird beim Verlassen des Panels entfernt). */
+  private _hideHaSidebar(hide: boolean): void {
+    const main = document.querySelector("home-assistant")?.shadowRoot?.querySelector("home-assistant-main");
+    const root = main?.shadowRoot;
+    if (!root) return;
+    root.getElementById("fp-kiosk-style")?.remove();
+    if (!hide) return;
+    const style = document.createElement("style");
+    style.id = "fp-kiosk-style";
+    style.textContent =
+      ":host{--mdc-drawer-width:0px !important} ha-drawer{--mdc-drawer-width:0px !important} ha-sidebar{display:none !important}";
+    root.appendChild(style);
   }
 
   protected willUpdate(): void {

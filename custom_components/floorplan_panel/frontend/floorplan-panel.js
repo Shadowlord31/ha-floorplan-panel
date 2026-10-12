@@ -19664,10 +19664,17 @@ let ye = class extends ce {
     super(...arguments), this.narrow = !1, this.kiosk = !1, this._edit = !1, this._revision = 0, this._loading = !1;
   }
   connectedCallback() {
-    super.connectedCallback(), this.kiosk = new URLSearchParams(location.search).has("kiosk"), this.hass && !this._plan && this._load();
+    super.connectedCallback(), this.kiosk = new URLSearchParams(location.search).has("kiosk"), this.kiosk && this._hideHaSidebar(!0), this.hass && !this._plan && this._load();
   }
   disconnectedCallback() {
-    super.disconnectedCallback(), this._unsub?.(), this._unsub = void 0;
+    super.disconnectedCallback(), this.kiosk && this._hideHaSidebar(!1), this._unsub?.(), this._unsub = void 0;
+  }
+  /** Kiosk: HAs eigene Seitenleiste ausblenden (Stil in home-assistant-main, wird beim Verlassen des Panels entfernt). */
+  _hideHaSidebar(e) {
+    const i = document.querySelector("home-assistant")?.shadowRoot?.querySelector("home-assistant-main")?.shadowRoot;
+    if (!i || (i.getElementById("fp-kiosk-style")?.remove(), !e)) return;
+    const n = document.createElement("style");
+    n.id = "fp-kiosk-style", n.textContent = ":host{--mdc-drawer-width:0px !important} ha-drawer{--mdc-drawer-width:0px !important} ha-sidebar{display:none !important}", i.appendChild(n);
   }
   willUpdate() {
     this.hass && !this._plan && !this._loading && !this._error && this._load();
