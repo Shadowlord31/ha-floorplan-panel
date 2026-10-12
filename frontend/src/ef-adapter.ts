@@ -16,6 +16,7 @@ import "./room-sidebar";
 import type { HomeAssistant } from "./ha";
 import type { Area as PanelArea } from "./types";
 import { dump, load } from "js-yaml";
+import { parseCardsYaml } from "./cards-yaml";
 import { parseEfImport, type EfImport } from "./ef-import";
 
 const DOMAIN = "floorplan_panel";
@@ -78,6 +79,7 @@ export class EfHost extends LitElement {
   @state() private _cardsDraft: CardConfig[] = [];
   @state() private _cardsError = "";
   @state() private _cardEdit?: CardEdit;
+  @state() private _cardsPaste?: { text: string; error: string };
   @state() private _addType = "entities";
   @state() private _customType = "";
 
@@ -289,6 +291,7 @@ export class EfHost extends LitElement {
     this._cardsDraft = structuredClone(this._sidebarCards());
     this._cardsError = "";
     this._cardEdit = undefined;
+    this._cardsPaste = undefined;
     this._cardsDialog()?.showModal();
   };
 
@@ -369,6 +372,18 @@ export class EfHost extends LitElement {
     }
   }
 
+  private _applyPaste(append: boolean): void {
+    const p = this._cardsPaste;
+    if (!p) return;
+    try {
+      const cards = parseCardsYaml(p.text);
+      this._cardsDraft = append ? [...this._cardsDraft, ...cards] : cards;
+      this._cardsPaste = undefined;
+    } catch (err: any) {
+      this._cardsPaste = { ...p, error: err?.message ?? String(err) };
+    }
+  }
+
   private _finishCardEdit(): void {
     const e = this._cardEdit;
     if (!e) return;
@@ -407,9 +422,26 @@ export class EfHost extends LitElement {
 
   private _renderCardsDialog() {
     const e = this._cardEdit;
+    const p = this._cardsPaste;
     return html`<dialog class="import cards">
       <h3>Karten der Übersicht</h3>
-      ${e
+      ${p
+        ? html`<p>
+              Kartenliste (<code>- type: …</code>) oder YAML einer Ansicht mit <code>cards:</code> einfügen. Titel, Pfad
+              und Badges werden ignoriert.
+            </p>
+            <textarea
+              rows="14"
+              .value=${p.text}
+              @input=${(ev: Event) => (this._cardsPaste = { ...p, text: (ev.target as HTMLTextAreaElement).value })}
+            ></textarea>
+            ${p.error ? html`<div class="err">${p.error}</div>` : nothing}
+            <div class="row">
+              <button @click=${() => (this._cardsPaste = undefined)}>Zurück</button>
+              <button ?disabled=${!p.text.trim()} @click=${() => this._applyPaste(true)}>Anhängen</button>
+              <button class="primary" ?disabled=${!p.text.trim()} @click=${() => this._applyPaste(false)}>Ersetzen</button>
+            </div>`
+      : e
         ? html`<p>${this._cardLabel(this._cardsDraft[e.index] ?? {})}</p>
             ${e.yaml
               ? html`<p>Für diesen Kartentyp gibt es keinen Editor – Konfiguration als YAML:</p>
@@ -450,6 +482,7 @@ export class EfHost extends LitElement {
                   />`
                 : nothing}
               <button @click=${() => void this._addCard()}>Karte hinzufügen</button>
+              <button @click=${() => (this._cardsPaste = { text: "", error: "" })}>Liste per YAML einfügen</button>
             </div>
             ${this._cardsError ? html`<div class="err">${this._cardsError}</div>` : nothing}
             <div class="row">
@@ -610,6 +643,7 @@ export class EfHost extends LitElement {
       white-space: nowrap;
     }
     dialog.cards .row.add {
+      flex-wrap: wrap;
       justify-content: flex-start;
       align-items: center;
     }
