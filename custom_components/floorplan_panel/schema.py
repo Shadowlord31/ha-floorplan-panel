@@ -34,6 +34,8 @@ PLAN_SCHEMA = vol.Schema(
             {
                 vol.Optional("wallThickness", default=12): vol.All(vol.Coerce(float), vol.Range(min=1, max=100)),
                 vol.Optional("grid", default=10): vol.All(vol.Coerce(float), vol.Range(min=1, max=500)),
+                # Lovelace-Karten für die Idle-Seitenleiste (Kartenkonfigurationen)
+                vol.Optional("sidebarCards"): vol.All([dict], vol.Length(max=20)),
             },
             extra=vol.REMOVE_EXTRA,
         ),

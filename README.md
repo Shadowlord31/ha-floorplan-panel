@@ -54,6 +54,7 @@ Grundriss bleibt erhalten.
   **Beispiel-Grundriss** zu laden (frei erfunden, zum Ausprobieren). Nur Administratoren sehen diese Knöpfe.
 - Mit dem Stift-Symbol oben rechts öffnet sich der **Editor**: zeichnen, Entitäten zuordnen, pro Raum die
   Seitenleiste pflegen; „Import“ übernimmt die Konfiguration einer vorhandenen easy-floorplan-Karte als Entwurf.
+- **Übersicht-Karten:** Ohne aktiven Raum zeigt die feste Seitenleiste eine Raumliste. Administratoren können dort über „Übersicht-Karten“ eine YAML-Liste beliebiger Lovelace-Karten hinterlegen (`settings.sidebarCards`), die stattdessen angezeigt wird.
 - Pro Raum legen Sie fest, welche Geräte, Szenen und Skripte im Popup erscheinen.
 - Der Plan wird in `.storage/floorplan_panel.plan` gespeichert und ist Teil Ihres
   Home-Assistant-Backups.

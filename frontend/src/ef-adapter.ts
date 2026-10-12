@@ -15,6 +15,7 @@ import "./ef/editor";
 import "./room-sidebar";
 import type { HomeAssistant } from "./ha";
 import type { Area as PanelArea } from "./types";
+import { dump, load } from "js-yaml";
 import { parseEfImport, type EfImport } from "./ef-import";
 
 const DOMAIN = "floorplan_panel";
@@ -55,6 +56,8 @@ export class EfHost extends LitElement {
   private _ro?: ResizeObserver;
   @state() private _importText = "";
   @state() private _importError = "";
+  @state() private _cardsText = "";
+  @state() private _cardsError = "";
 
   private _pending?: EfConfig;
   private _timer?: ReturnType<typeof setTimeout>;
@@ -93,6 +96,7 @@ export class EfHost extends LitElement {
     super.connectedCallback();
     this._ro = new ResizeObserver(() => (this._narrow = this.clientWidth < NARROW_PX));
     this._ro.observe(this);
+    void (window as unknown as { loadCardHelpers?: () => Promise<unknown> }).loadCardHelpers?.();
   }
 
   disconnectedCallback(): void {
@@ -250,14 +254,72 @@ export class EfHost extends LitElement {
     this.dispatchEvent(new CustomEvent("ef-close", { bubbles: true, composed: true }));
   }
 
+  private _sidebarCards(): Record<string, unknown>[] {
+    const c = (this.plan?.settings as { sidebarCards?: unknown } | undefined)?.sidebarCards;
+    return Array.isArray(c) ? (c as Record<string, unknown>[]) : [];
+  }
+
+  private _cardsDialog(): HTMLDialogElement | null {
+    return this.renderRoot.querySelector<HTMLDialogElement>("dialog.cards");
+  }
+
+  private _openCards = (): void => {
+    const cards = this._sidebarCards();
+    this._cardsText = cards.length ? dump(cards, { lineWidth: 100 }) : "";
+    this._cardsError = "";
+    this._cardsDialog()?.showModal();
+  };
+
+  private async _saveCards(): Promise<void> {
+    let cards: unknown = [];
+    try {
+      cards = this._cardsText.trim() ? load(this._cardsText) : [];
+    } catch (err: any) {
+      this._cardsError = "YAML ungültig: " + (err?.message ?? err);
+      return;
+    }
+    if (!Array.isArray(cards) || cards.some((c) => !c || typeof c !== "object" || !(c as any).type)) {
+      this._cardsError = "Erwartet wird eine Liste von Karten, jede mit `type:`.";
+      return;
+    }
+    try {
+      const settings = { ...((this._plan?.settings as object) ?? {}), sidebarCards: cards };
+      const res = await this.hass.callWS<{ plan: RawPlan; revision: number }>({
+        type: `${DOMAIN}/plan/save`,
+        plan: { ...(this._plan ?? this.plan ?? {}), settings },
+        revision: this._rev,
+      });
+      this._plan = res.plan;
+      this._rev = res.revision;
+      this.dispatchEvent(
+        new CustomEvent("ef-saved", { detail: { plan: res.plan, revision: res.revision }, bubbles: true, composed: true })
+      );
+      this._cardsDialog()?.close();
+    } catch (err: any) {
+      this._cardsError = err?.message ?? String(err);
+    }
+  }
+
   private _renderIdle() {
     const rooms = this._rooms();
+    const cards = this._sidebarCards();
+    const admin = !!this.hass?.user?.is_admin;
+    const edit = admin
+      ? html`<button class="cards-edit" title="Karten der Übersicht bearbeiten" @click=${this._openCards}>
+          <ha-icon icon="mdi:pencil"></ha-icon>Übersicht-Karten
+        </button>`
+      : nothing;
+    if (cards.length)
+      return html`<div class="idle">
+        ${cards.map((c) => html`<hui-card .hass=${this.hass} .config=${c}></hui-card>`)} ${edit}
+      </div>`;
     return html`<div class="idle">
       <h3>Übersicht</h3>
       <p>Raum im Plan antippen, um seine Geräte, Szenen und Skripte zu sehen.</p>
       ${rooms.map(
         (r) => html`<button @click=${() => this.showRoom(r.id)}><ha-icon icon="mdi:floor-plan"></ha-icon>${r.name}</button>`
       )}
+      ${edit}
     </div>`;
   }
 
@@ -279,6 +341,24 @@ export class EfHost extends LitElement {
     if (!this.edit)
       return html`<div class="layout ${this._narrow ? "narrow" : ""}">
         <fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
+        <dialog class="import cards">
+          <h3>Karten der Übersicht</h3>
+          <p>
+            Liste von Lovelace-Karten (YAML), die in der Seitenleiste angezeigt werden, solange kein Raum aktiv ist.
+            Leer lassen für die automatische Raumliste.
+          </p>
+          <textarea
+            rows="14"
+            placeholder="- type: entities&#10;  entities:&#10;    - light.wohnzimmer"
+            .value=${this._cardsText}
+            @input=${(e: Event) => (this._cardsText = (e.target as HTMLTextAreaElement).value)}
+          ></textarea>
+          ${this._cardsError ? html`<div class="err">${this._cardsError}</div>` : nothing}
+          <div class="row">
+            <button @click=${() => this._cardsDialog()?.close()}>Abbrechen</button>
+            <button class="primary" @click=${() => void this._saveCards()}>Speichern</button>
+          </div>
+        </dialog>
         <aside class="side" @pointerdown=${this._armResetTimer} @keydown=${this._armResetTimer} @change=${this._armResetTimer}>
           ${this._room
             ? html`<fp-room-sidebar
@@ -367,6 +447,12 @@ export class EfHost extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    .idle .cards-edit {
+      align-self: flex-start;
+      font-size: 12px;
+      padding: 4px 10px;
+      color: var(--secondary-text-color);
     }
     .idle h3 {
       margin: 0;

@@ -13,7 +13,7 @@ nur grob; die Struktur der Karten-Konfiguration kennt das Frontend (`frontend/sr
     "width": 1000, "height": 700,
     "floors": [{ "id": "wohnung", "name": "Wohnung", "walls": [], "openings": [], "areas": [], "items": [] }]
   },
-  "settings": { "wallThickness": 12, "grid": 10 }
+  "settings": { "wallThickness": 12, "grid": 10, "sidebarCards": [ { "type": "entities", "entities": ["light.x"] } ] }
 }
 ```
 
