@@ -66,6 +66,7 @@ export class EfHost extends LitElement {
   @property({ attribute: false }) plan?: RawPlan;
   @property({ type: Number }) revision = 0;
   @property({ type: Boolean }) edit = false;
+  @property({ type: Boolean }) kiosk = false;
   @property({ attribute: false }) narrow = false;
 
   @state() private _status: "" | "saving" | "saved" | "error" = "";
@@ -495,7 +496,7 @@ export class EfHost extends LitElement {
   private _renderIdle() {
     const rooms = this._rooms();
     const cards = this._sidebarCards();
-    const admin = !!this.hass?.user?.is_admin;
+    const admin = !!this.hass?.user?.is_admin && !this.kiosk;
     const edit = admin
       ? html`<button class="cards-edit" title="Karten der Übersicht bearbeiten" @click=${this._openCards}>
           <ha-icon icon="mdi:pencil"></ha-icon>Übersicht-Karten

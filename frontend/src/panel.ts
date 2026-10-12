@@ -22,6 +22,7 @@ type PanelEvent =
 export class FloorplanPanel extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property({ type: Boolean, reflect: true }) narrow = false;
+  @property({ type: Boolean, reflect: true }) kiosk = false;
   @property({ attribute: false }) panel?: { config?: { version?: string } };
 
   @state() private _plan?: RawPlan;
@@ -34,6 +35,7 @@ export class FloorplanPanel extends LitElement {
 
   connectedCallback(): void {
     super.connectedCallback();
+    this.kiosk = new URLSearchParams(location.search).has("kiosk");
     if (this.hass && !this._plan) this._load();
   }
 
@@ -119,6 +121,7 @@ export class FloorplanPanel extends LitElement {
             .plan=${this._plan}
             .revision=${this._revision}
             .edit=${this._edit}
+            .kiosk=${this.kiosk}
             @ef-saved=${this._onEfSaved}
             @ef-edit-request=${() => (this._edit = true)}
             @ef-close=${() => (this._edit = false)}
@@ -136,6 +139,9 @@ export class FloorplanPanel extends LitElement {
       background: var(--primary-background-color);
       color: var(--primary-text-color);
       font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
+    }
+    :host([kiosk]) .toolbar {
+      display: none;
     }
     .toolbar {
       display: flex;

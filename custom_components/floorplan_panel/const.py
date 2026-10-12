@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "floorplan_panel"
-VERSION = "0.24.0"
+VERSION = "0.25.0"
 
 STORAGE_VERSION = 1
 STORAGE_KEY_PLAN = f"{DOMAIN}.plan"
