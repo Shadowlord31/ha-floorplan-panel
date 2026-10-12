@@ -138,3 +138,9 @@ Seit v0.13.0 gibt es im Panel einen zweiten Modus auf Basis des Quellcodes von e
 - `type` (`room`, `balcony`, `hallway`, `staircase`, `bathroom`, `custom`) und `typeLabel` bei `custom`; Balkone werden gestrichelt gezeichnet.
 - `sidebar`: Liste `{entity, name?, icon?}`; ein Tipp auf den Raum öffnet sie im Popup.
 - Rechteck-Werkzeug im Raum-Modus des Editors.
+
+## Port-Editor: Flügelzahl (`plan.ef`, ab v0.16.0)
+
+- `sash`: `single` | `double` | `triple` | `quad` (1–4 gleich breite Flügel nebeneinander; alle links angeschlagen, der letzte rechts; Standard Fenster `double`, Tür `single`).
+- Sensoren: Flügel 1 = `entity`, Flügel 2 = `secondaryEntity`, Flügel 3/4 = `extraEntities[0..1]`. Ein Flügel ohne Sensor folgt Flügel 1.
+- Bei 3/4 Flügeln gelten keine Einzelbreiten/-anschläge; der Lichtschein nutzt die zentrierte Näherung.

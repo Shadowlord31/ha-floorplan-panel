@@ -72,6 +72,7 @@ import {
   wallsLightPassesThrough,
   glowClearSpan,
   openingHasTwoLeaves,
+  openingLeafCount,
   secondLeafOf,
   renderGlowMask,
   openingDefaultOpen,
@@ -2502,7 +2503,7 @@ export class FloorplanCardEditor extends LitElement {
     // What it is, and how it is drawn.
     ["Shape", ["type", "motion", "length", "sash", "sashSpan", "hinge", "opens", "slide", "style", "angle"]],
     // Which contacts drive it — the opening's own, before the shutter's.
-    ["What it reads", ["entity", "secondaryEntity", "invert"]],
+    ["What it reads", ["entity", "secondaryEntity", "leaf3Entity", "leaf4Entity", "invert"]],
     // How it behaves toward the sun (issue #177), which is neither shape nor
     // state but gets asked about as its own thing.
     ["Sunlight", ["glazed", "sunlight"]],
@@ -3326,7 +3327,10 @@ export class FloorplanCardEditor extends LitElement {
                   this.hass?.states[o.secondaryEntity]
                 )
               : undefined,
-            o.shutterEntity ? shutterAmount(this.hass?.states[o.shutterEntity], o.shutterInvert) : undefined
+            o.shutterEntity ? shutterAmount(this.hass?.states[o.shutterEntity], o.shutterInvert) : undefined,
+            openingLeafCount(o) > 2 && o.extraEntities
+              ? o.extraEntities.map((id) => amt(id || o.entity))
+              : undefined
           );
         })
       : floor.walls;

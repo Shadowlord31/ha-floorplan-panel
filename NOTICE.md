@@ -54,3 +54,7 @@ SOFTWARE.
 ## Eigene Erweiterungen in den übernommenen Dateien (v0.15.0)
 
 In `frontend/src/ef/editor.ts` und `types.ts` sind folgende Zusätze mit dem Kommentar `floorplan-panel` markiert: Vorlagen (`config.templates`), Ausrichtungslinien (`_alignedSnap`) und Kontextmenü (`_renderContextMenu`).
+
+## Eigene Erweiterungen (v0.16.0)
+
+Drei und vier Flügel für Fenster/Türen (`sash: "triple" | "quad"`, `extraEntities`) in `frontend/src/ef/types.ts`, `render.ts`, `floorplan-card.ts`, `editor-forms.ts` und `editor.ts`, jeweils mit dem Kommentar `floorplan-panel` markiert.

@@ -95,6 +95,8 @@ export interface Wall {
 }
 
 export type OpeningType = "door" | "window";
+/** Hinged leaf layout; `triple`/`quad` are floorplan-panel additions (3 and 4 equal leaves). */
+export type OpeningSash = "single" | "double" | "triple" | "quad";
 
 /**
  * How a sliding opening's panels are arranged. Named as a type rather than
@@ -245,7 +247,13 @@ export interface Opening {
    * their own arc, and `flipH` picks the jamb for a single. Ignored by sliding
    * and rolling openings. See {@link defaultSash} / {@link openingSash}.
    */
-  sash?: "single" | "double";
+  sash?: OpeningSash;
+  /**
+   * floorplan-panel: sensors of leaves 3 and 4 (`sash: "triple" | "quad"`).
+   * Leaves 1 and 2 keep `entity` / `secondaryEntity`. A leaf without a sensor
+   * follows the first leaf.
+   */
+  extraEntities?: string[];
   /**
    * Lets sunlight through even while shut. Defaults per type rather than to a
    * fixed value: a window is glass, a door is not.

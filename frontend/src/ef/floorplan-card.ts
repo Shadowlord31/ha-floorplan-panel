@@ -49,6 +49,8 @@ import {
   areaActionForGesture,
   areaHasActions,
   openingHasTwoLeaves,
+  openingLeafCount,
+  leafOf,
   secondLeafOf,
   shutterAmount,
   shutterStyleOf,
@@ -383,6 +385,24 @@ export class FloorplanCard extends LitElement {
     const leaf = secondLeafOf(o);
     const state = renderHass?.states[o.secondaryEntity];
     return { amount: resolveOpeningAmount(leaf, state), active: openingIsActive(leaf, state) };
+  }
+
+  /** floorplan-panel: states of leaves 3 and 4; a leaf without a sensor follows the first. */
+  private _openingMore(o: Opening, renderHass: RenderHass | undefined): { amount: number; active: boolean }[] | undefined {
+    const n = openingLeafCount(o);
+    if (n < 3 || !o.extraEntities?.some(Boolean)) return undefined;
+    const out: { amount: number; active: boolean }[] = [];
+    for (let i = 2; i < n; i++) {
+      const id = o.extraEntities[i - 2];
+      if (!id) {
+        out.push({ amount: this._openingAmount(o, renderHass), active: this._openingActive(o, renderHass) });
+        continue;
+      }
+      const leaf = leafOf(o, i);
+      const state = renderHass?.states[id];
+      out.push({ amount: resolveOpeningAmount(leaf, state), active: openingIsActive(leaf, state) });
+    }
+    return out;
   }
 
   /**
@@ -966,7 +986,8 @@ export class FloorplanCard extends LitElement {
             o,
             this._openingAmount(o, renderHass),
             this._openingSecond(o, renderHass)?.amount,
-            o.shutterEntity ? shutterAmount(renderHass?.states[o.shutterEntity], o.shutterInvert) : undefined
+            o.shutterEntity ? shutterAmount(renderHass?.states[o.shutterEntity], o.shutterInvert) : undefined,
+            this._openingMore(o, renderHass)?.map((m) => m.amount)
           )
         )
       : active.walls;
@@ -1232,7 +1253,8 @@ export class FloorplanCard extends LitElement {
                         openingClearFraction(
                           o,
                           this._openingAmount(o, renderHass),
-                          this._openingSecond(o, renderHass)?.amount
+                          this._openingSecond(o, renderHass)?.amount,
+                          this._openingMore(o, renderHass)?.map((m) => m.amount)
                         ),
                       // A shutter that is all the way down stops the light, as
                       // one does. Undefined where none is bound, so an opening
@@ -1305,6 +1327,7 @@ export class FloorplanCard extends LitElement {
                 accent: o.activeColor ?? SKIN_ACCENT,
                 // Per-leaf state for a two-sensor biparting slider (issue #145).
                 second: this._openingSecond(o, renderHass),
+                more: this._openingMore(o, renderHass),
                 // External roller shutter layer (issue #74). No entity bound
                 // yet → previewed shut, like a static plan.
                 shutter: o.shutterEntity

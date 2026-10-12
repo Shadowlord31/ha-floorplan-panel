@@ -11,6 +11,7 @@ import type {
   Floor,
   Opening,
   OpeningType,
+  OpeningSash,
   SliderStyle,
   ItemKind,
   IconAnimation,
@@ -149,6 +150,8 @@ export function collectWatchedEntities(c: FloorplanCardConfig): Set<string> {
       // up whenever some *other* watched entity moves, so it reads as
       // intermittent rather than broken.
       if (o.secondaryEntity) ids.add(o.secondaryEntity);
+      // floorplan-panel: sensors of leaves 3 and 4
+      for (const id of o.extraEntities ?? []) if (id) ids.add(id);
       if (o.shutterSecondaryEntity) ids.add(o.shutterSecondaryEntity);
     }
     for (const it of f.items) {
@@ -678,7 +681,7 @@ function clipWallToBox(
  * single-sensor `biparting` or double sash, where both leaves share one amount
  * and the mean of it is itself.
  */
-export function openingClearFraction(o: Opening, amount: number, secondAmount?: number): number {
+export function openingClearFraction(o: Opening, amount: number, secondAmount?: number, moreAmounts?: readonly number[]): number {
   // Nothing moves, so nothing is ever clear — whatever a bound sensor says
   // (issue #218). Asked before `amount` is even read, because a fixed pane
   // with a contact on it is exactly the case that would otherwise open.
@@ -689,8 +692,16 @@ export function openingClearFraction(o: Opening, amount: number, secondAmount?: 
   // (issue #218): swung fully open, a half-width sash leaves half the glass
   // still in place. `openingSashSpan` is 1 for everything else, so this is
   // the identity for every opening that has always filled its frame.
-  if (openingMotion(o) === "swing")
-    return openingSash(o) === "double" ? (a1 + a2) / 2 : a1 * openingSashSpan(o);
+  if (openingMotion(o) === "swing") {
+    // floorplan-panel: three or four equal leaves each clear their own share
+    const n = openingLeafCount(o);
+    if (n > 2) {
+      let sum = a1 + a2;
+      for (let i = 2; i < n; i++) sum += Math.max(0, Math.min(1, moreAmounts?.[i - 2] ?? amount));
+      return sum / n;
+    }
+    return n === 2 ? (a1 + a2) / 2 : a1 * openingSashSpan(o);
+  }
   // A top-hinged sash leaves the plan rather than sweeping across it (issue
   // #272), so nothing of it is left in the gap: open it and the whole width is
   // clear. One leaf, so `secondAmount` has nothing to average with.
@@ -745,10 +756,11 @@ export function glowClearFraction(
   amount: number,
   secondAmount?: number,
   shutter?: number,
+  moreAmounts?: readonly number[],
 ): number {
   if (shutter !== undefined && shutter <= 0) return 0;
   if (openingIsGlazed(o) && openingMotion(o) !== "roll") return 1;
-  return openingClearFraction(o, amount, secondAmount);
+  return openingClearFraction(o, amount, secondAmount, moreAmounts);
 }
 
 /**
@@ -765,10 +777,11 @@ export function glowClearSpan(
   amount: number,
   secondAmount?: number,
   shutter?: number,
+  moreAmounts?: readonly number[],
 ): [number, number] {
   if (shutter !== undefined && shutter <= 0) return [0, 0];
   if (openingIsGlazed(o) && openingMotion(o) !== "roll") return [0, 1];
-  return openingClearSpan(o, amount, secondAmount);
+  return openingClearSpan(o, amount, secondAmount, moreAmounts);
 }
 
 /**
@@ -798,8 +811,9 @@ export function openingClearSpan(
   o: Opening,
   amount: number,
   secondAmount?: number,
+  moreAmounts?: readonly number[],
 ): [number, number] {
-  const clear = openingClearFraction(o, amount, secondAmount);
+  const clear = openingClearFraction(o, amount, secondAmount, moreAmounts);
   const centred: [number, number] = [(1 - clear) / 2, (1 + clear) / 2];
   // A sash narrower than its frame is hinged at one jamb with fixed glass
   // beside it, so what it clears is at *that* jamb — never in the middle,
@@ -811,7 +825,7 @@ export function openingClearSpan(
     const span: [number, number] = [0, clear];
     return o.flipH ? [1 - span[1], 1 - span[0]] : span;
   }
-  if (openingMotion(o) !== "swing" || openingSash(o) !== "double") return centred;
+  if (openingMotion(o) !== "swing" || openingLeafCount(o) !== 2) return centred;
   // Each leaf is hinged at its own jamb and covers its own half, so its
   // projection on the wall shrinks toward that jamb as it swings: the first
   // leaf clears outward from the middle to `0.5 - a1/2`, the second to
@@ -2574,8 +2588,33 @@ export function sliderStyleHasTwoLeaves(style: SliderStyle): boolean {
  */
 export function openingHasTwoLeaves(o: Opening): boolean {
   return openingMotion(o) === "swing"
-    ? openingSash(o) === "double"
+    ? openingLeafCount(o) >= 2
     : sliderStyleHasTwoLeaves(sliderStyleOf(o));
+}
+
+/**
+ * floorplan-panel: how many hinged leaves a swing opening has, 1..4. A slider
+ * or roller reports 1 (their panels are modelled by their own style).
+ */
+export function openingLeafCount(o: Opening): 1 | 2 | 3 | 4 {
+  if (openingMotion(o) !== "swing") return 1;
+  switch (openingSash(o)) {
+    case "double":
+      return 2;
+    case "triple":
+      return 3;
+    case "quad":
+      return 4;
+    default:
+      return 1;
+  }
+}
+
+/** floorplan-panel: leaf `index` (0-based) as an opening of its own, for the resolver chain. */
+export function leafOf(o: Opening, index: number): Opening {
+  if (index === 0) return o;
+  if (index === 1) return secondLeafOf(o);
+  return { ...o, entity: o.extraEntities?.[index - 2] };
 }
 
 /**
@@ -2600,7 +2639,7 @@ export function secondLeafOf(o: Opening): Opening {
  * expressible at all — every door was drawn as one leaf across the whole
  * opening, however wide.
  */
-export function defaultSash(type: OpeningType): "single" | "double" {
+export function defaultSash(type: OpeningType): OpeningSash {
   return type === "window" ? "double" : "single";
 }
 
@@ -2612,7 +2651,7 @@ export function defaultSash(type: OpeningType): "single" | "double" {
  * doors they were "double" — harmless while the door branch ignored it, and
  * wrong the moment a door could have two leaves.
  */
-export function openingSash(o: Opening): "single" | "double" {
+export function openingSash(o: Opening): OpeningSash {
   return openingMotion(o) === "swing" ? (o.sash ?? defaultSash(o.type)) : defaultSash(o.type);
 }
 
@@ -3327,6 +3366,8 @@ export interface OpeningStyle {
    * symmetrically exactly as it always has. Ignored by anything with one leaf.
    */
   second?: { amount: number; active?: boolean };
+  /** floorplan-panel: states of leaves 3 and 4 (`sash: "triple" | "quad"`). */
+  more?: { amount: number; active?: boolean }[];
 }
 
 /**
@@ -3379,6 +3420,9 @@ export function renderOpening(o: Opening, style: OpeningStyle): SVGTemplateResul
     cssColorOr(isActive ? accent : a === 0 ? shut : color, SKIN_ACCENT);
   const tone = leafTone(active, amt);
   const tone2 = style.second ? leafTone(!!style.second.active, amt2) : tone;
+  // floorplan-panel: leaves 3 and 4; a leaf without its own state follows the first
+  const moreAmt = (style.more ?? []).map((m) => Math.max(0, Math.min(1, m.amount)));
+  const moreTone = (style.more ?? []).map((m, i) => leafTone(!!m.active, moreAmt[i]!));
 
   let body: SVGTemplateResult;
   if (openingMotion(o) === "swing") {
@@ -3388,17 +3432,22 @@ export function renderOpening(o: Opening, style: OpeningStyle): SVGTemplateResul
     // those are what this branch decides — rather than three near-copies of
     // the same markup, which is how the door came to have no way of being a
     // double at all.
-    const two = openingSash(o) === "double";
+    const nLeaves = openingLeafCount(o);
     // One leaf spans the opening; two split it. A single sash may also be
     // narrower than its frame (issue #218), the rest of which is fixed glass.
     // The arc radius follows, because it is the path the leaf's own tip
     // sweeps — a half-width sash sweeps a half-width quarter-circle.
     const span = openingSashSpan(o);
-    const leafW = two ? half : o.length * span;
+    const leafW = nLeaves > 1 ? o.length / nLeaves : o.length * span;
     const arcLen = (Math.PI / 2) * leafW;
     // Revealed via stroke-dashoffset so each arc "draws on" as its leaf opens.
     // Each arc is drawn from its own leaf's state, so a pair of casement sashes
     // with a contact each traces two different arcs (issue #159).
+    const leafList = Array.from({ length: nLeaves }, (_, index) => {
+      const amtI = index === 0 ? amt : index === 1 ? amt2 : (moreAmt[index - 2] ?? amt);
+      const toneI = index === 0 ? tone : index === 1 ? tone2 : (moreTone[index - 2] ?? tone);
+      return { index, amt: amtI, tone: toneI, hingeRight: nLeaves > 1 && index === nLeaves - 1 };
+    });
     const arc = (d: string, tn: string, a: number) => svg`<path class="fp-door-arc" d=${d}
               fill="none" stroke-width="1.5" stroke-dasharray=${arcLen}
               style="stroke:${tn};stroke-dashoffset:${arcLen * (1 - a)};" />`;
@@ -3415,14 +3464,18 @@ export function renderOpening(o: Opening, style: OpeningStyle): SVGTemplateResul
     body = svg`
         ${jambs}
         ${
-          two
-            ? // Two leaves hinged at opposite jambs, meeting in the middle when
-              // shut and each tracing its own quarter circle outward.
-              svg`${arc(`M 0 0 A ${half} ${half} 0 0 0 ${-half} ${-half}`, tone, amt)}${arc(
-                `M 0 0 A ${half} ${half} 0 0 1 ${half} ${-half}`,
-                tone2,
-                amt2
-              )}`
+          nLeaves > 1
+            ? // Equal leaves side by side (floorplan-panel: 2..4). All hang on
+              // their left edge but the last, which hangs on the right; for two
+              // that is the classic pair meeting in the middle, each tracing
+              // its own quarter circle outward.
+              svg`${leafList.map((l) => {
+                const x0 = -half + l.index * leafW;
+                const x1 = x0 + leafW;
+                return l.hingeRight
+                  ? arc(`M ${x0} 0 A ${leafW} ${leafW} 0 0 1 ${x1} ${-leafW}`, l.tone, l.amt)
+                  : arc(`M ${x1} 0 A ${leafW} ${leafW} 0 0 0 ${x0} ${-leafW}`, l.tone, l.amt);
+              })}`
             : // Hinged at the −x jamb, so the tip starts `leafW` along the wall
               // and ends `leafW` out from it. At full span that is exactly the
               // arc this drew before `sashSpan` existed.
@@ -3437,24 +3490,21 @@ export function renderOpening(o: Opening, style: OpeningStyle): SVGTemplateResul
               stroke=${color} stroke-width=${o.type === "window" ? 1.5 : 2.5} />`
             : nothing
         }
-        <!-- leaf hinged at the left jamb (flipH mirrors it to the right one) -->
-        <g transform="translate(${-half} 0)">
-          <g class="fp-door-leaf" style="transform:rotate(${-90 * amt}deg);">
-            <rect x="0" y="-1.25" width=${leafW} height="2.5" style="fill:${tone};" />
-          </g>
-        </g>
-        ${
-          two
-            ? // The other leaf, on its own sensor when it has one (issue #159):
-              // a casement pair with a contact per sash draws left-open /
-              // right-shut, exactly as a two-sensor slider parts unevenly.
-              svg`<g transform="translate(${half} 0)">
-          <g class="fp-leaf-r" style="transform:rotate(${90 * amt2}deg);">
-            <rect x=${-half} y="-1.25" width=${half} height="2.5" style="fill:${tone2};" />
+        <!-- leaves hinged at their left edge, the last at its right (flipH mirrors them) -->
+        ${leafList.map((l) => {
+          const x0 = -half + l.index * leafW;
+          return l.hingeRight
+            ? svg`<g transform="translate(${x0 + leafW} 0)">
+          <g class="fp-leaf-r" style="transform:rotate(${90 * l.amt}deg);">
+            <rect x=${-leafW} y="-1.25" width=${leafW} height="2.5" style="fill:${l.tone};" />
           </g>
         </g>`
-            : nothing
-        }
+            : svg`<g transform="translate(${x0} 0)">
+          <g class="fp-door-leaf" style="transform:rotate(${-90 * l.amt}deg);">
+            <rect x="0" y="-1.25" width=${leafW} height="2.5" style="fill:${l.tone};" />
+          </g>
+        </g>`;
+        })}
       `;
   } else if (openingMotion(o) === "fixed") {
     // A window that does not open (issue #218): a bay window, a picture

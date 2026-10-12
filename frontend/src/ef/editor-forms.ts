@@ -42,6 +42,7 @@ import {
   DEFAULT_OFFLINE_STYLE,
   DEFAULT_RIPPLE_DIRECTION,
   DEFAULT_RIPPLE_WIDTH,
+  type OpeningSash,
 } from "./types";
 import {
   DEFAULT_LABEL_SIZE,
@@ -55,6 +56,7 @@ import {
   openingMotion,
   MIN_SASH_SPAN,
   openingHasTwoLeaves,
+  openingLeafCount,
   sliderStyleHasTwoLeaves,
   pressEffectOf,
   labelPositionOf,
@@ -269,11 +271,21 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
       name: "sash",
       label: door ? "Leaves" : "Sashes",
       helper: door
-        ? "Double = two leaves meeting in the middle, hinged at each jamb"
-        : "Single = one full-width sash (issue #73)",
+        ? "Double = two leaves meeting in the middle, hinged at each jamb. Three or four: equal leaves side by side"
+        : "Single = one full-width sash (issue #73). Three or four: equal sashes side by side",
       selector: door
-        ? dropdown(opt("single", "Single (one leaf)"), opt("double", "Double (two leaves)"))
-        : dropdown(opt("double", "Double (two leaves)"), opt("single", "Single sash")),
+        ? dropdown(
+            opt("single", "Single (one leaf)"),
+            opt("double", "Double (two leaves)"),
+            opt("triple", "Triple (three leaves)"),
+            opt("quad", "Quad (four leaves)")
+          )
+        : dropdown(
+            opt("double", "Double (two leaves)"),
+            opt("single", "Single sash"),
+            opt("triple", "Triple (three sashes)"),
+            opt("quad", "Quad (four sashes)")
+          ),
     });
   }
   // How much of the frame actually opens (issue #218). Only a single leaf has
@@ -377,6 +389,24 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
       helper: "Its own sensor for the other leaf — leave empty to move both together",
       selector: { entity: { filter: [{ domain: OPENING_ENTITY_DOMAINS }] } },
     });
+  }
+  // floorplan-panel: sensors of leaves 3 and 4
+  if (motion === "swing" && o.entity) {
+    const n = openingLeafCount(o);
+    if (n >= 3)
+      fields.push({
+        name: "leaf3Entity",
+        label: "Third leaf",
+        helper: "Its own sensor — leave empty to follow the first leaf",
+        selector: { entity: { filter: [{ domain: OPENING_ENTITY_DOMAINS }] } },
+      });
+    if (n >= 4)
+      fields.push({
+        name: "leaf4Entity",
+        label: "Fourth leaf",
+        helper: "Its own sensor — leave empty to follow the first leaf",
+        selector: { entity: { filter: [{ domain: OPENING_ENTITY_DOMAINS }] } },
+      });
   }
   // Offered on doors too: French doors and patio doors get shutters as well.
   // A hinged shutter usually reports through a contact sensor, so binary
@@ -552,6 +582,8 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
       sash: openingSash(o),
       entity: o.entity ?? "",
       secondaryEntity: o.secondaryEntity ?? "",
+      leaf3Entity: o.extraEntities?.[0] ?? "",
+      leaf4Entity: o.extraEntities?.[1] ?? "",
       glazed: openingIsGlazed(o),
       sunlight: o.sunlight ?? true,
       shutterEntity: o.shutterEntity ?? "",
@@ -634,6 +666,7 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
           // Nothing swings any more, so the sash's share of the frame has
           // nothing left to describe (issue #218).
           if (v !== "swing") out.sashSpan = undefined;
+          if (v !== "swing") out.extraEntities = undefined;
           // The second leaf's sensor goes only if the opening this *becomes*
           // has no second leaf. Asked of the result rather than of the motion,
           // because since issue #159 a hinged double has one too: a two-sensor
@@ -655,11 +688,23 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
           out.sash = v === defaultSash(o.type) ? undefined : v;
           // Dropping to one leaf leaves nothing for the second sensor to
           // drive (issue #159).
-          if (!openingHasTwoLeaves({ ...o, sash: v as "single" | "double" } as Opening))
-            out.secondaryEntity = undefined;
+          const nLeaves = openingLeafCount({ ...o, sash: v as OpeningSash, motion: "swing" } as Opening);
+          if (nLeaves < 2) out.secondaryEntity = undefined;
+          // floorplan-panel: fewer leaves than sensors — drop the surplus
+          if (nLeaves < 3) out.extraEntities = undefined;
+          else if (o.extraEntities && o.extraEntities.length > nLeaves - 2) {
+            const keep = o.extraEntities.slice(0, nLeaves - 2);
+            out.extraEntities = keep.some(Boolean) ? keep : undefined;
+          }
           // Two sashes already split the opening between them, so there is no
           // leftover pane for `sashSpan` to describe (issue #218).
-          if (v === "double") out.sashSpan = undefined;
+          if (nLeaves > 1) out.sashSpan = undefined;
+        } else if (k === "leaf3Entity" || k === "leaf4Entity") {
+          const prev = ((out as { extraEntities?: string[] }).extraEntities ?? o.extraEntities) as string[] | undefined;
+          const arr = [0, 1].map((i) => prev?.[i] ?? "");
+          arr[k === "leaf3Entity" ? 0 : 1] = (v as string) || "";
+          while (arr.length && !arr[arr.length - 1]) arr.pop();
+          out.extraEntities = arr.length ? arr : undefined;
         } else if (k === "shutterStyle") {
           out.shutterStyle = v;
           // Only a hinged pair has a second panel — a roll curtain is one
