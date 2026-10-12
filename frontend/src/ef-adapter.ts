@@ -73,6 +73,8 @@ export class EfHost extends LitElement {
   @state() private _error = "";
   @state() private _room?: PanelArea;
   @state() private _narrow = false;
+  // Beide Seitenleisten-Zweige bleiben im DOM (nur per hidden umgeschaltet): kein Mount/Unmount während der Zoom-Animation.
+  private _lastRoom?: PanelArea;
   private _resetTimer?: ReturnType<typeof setTimeout>;
   private _ro?: ResizeObserver;
   @state() private _importText = "";
@@ -531,19 +533,22 @@ export class EfHost extends LitElement {
           : html`<p>Ein Administrator kann ihn im Editor anlegen oder importieren.</p>`}
       </div>`;
     }
+    this._lastRoom = this._room ?? this._lastRoom ?? this._rooms()[0];
     if (!this.edit)
       return html`<div class="layout ${this._narrow ? "narrow" : ""}">
         <fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
         ${this._renderCardsDialog()}
         <aside class="side" @pointerdown=${this._armResetTimer} @keydown=${this._armResetTimer} @change=${this._armResetTimer}>
-          ${this._room
+          <div class="idle-wrap" ?hidden=${!!this._room}>${this._renderIdle()}</div>
+          ${this._lastRoom
             ? html`<fp-room-sidebar
+                ?hidden=${!this._room}
                 .hass=${this.hass}
-                .area=${this._room}
+                .area=${this._lastRoom}
                 .canEdit=${false}
                 @close=${this._closeRoom}
               ></fp-room-sidebar>`
-            : this._renderIdle()}
+            : nothing}
         </aside>
       </div>`;
     return html`
@@ -613,6 +618,10 @@ export class EfHost extends LitElement {
       height: 40%;
       border-left: none;
       border-top: 1px solid var(--divider-color);
+    }
+    .idle-wrap[hidden],
+    .side fp-room-sidebar[hidden] {
+      display: none;
     }
     .side fp-room-sidebar {
       flex: 1;

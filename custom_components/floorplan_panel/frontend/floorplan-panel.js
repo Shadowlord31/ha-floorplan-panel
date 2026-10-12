@@ -19373,7 +19373,7 @@ let q = class extends ce {
             </div>` : u`<p>Ein Administrator kann ihn im Editor anlegen oder importieren.</p>`}
       </div>`;
     }
-    return this.edit ? u`
+    return this._lastRoom = this._room ?? this._lastRoom ?? this._rooms()[0], this.edit ? u`
       <fp-ef-editor
         .panelMode=${!0}
         .panelError=${this._status === "error" ? this._error : ""}
@@ -19405,12 +19405,14 @@ let q = class extends ce {
         <fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
         ${this._renderCardsDialog()}
         <aside class="side" @pointerdown=${this._armResetTimer} @keydown=${this._armResetTimer} @change=${this._armResetTimer}>
-          ${this._room ? u`<fp-room-sidebar
+          <div class="idle-wrap" ?hidden=${!!this._room}>${this._renderIdle()}</div>
+          ${this._lastRoom ? u`<fp-room-sidebar
+                ?hidden=${!this._room}
                 .hass=${this.hass}
-                .area=${this._room}
+                .area=${this._lastRoom}
                 .canEdit=${!1}
                 @close=${this._closeRoom}
-              ></fp-room-sidebar>` : this._renderIdle()}
+              ></fp-room-sidebar>` : m}
         </aside>
       </div>`;
   }
@@ -19451,6 +19453,10 @@ q.styles = $e`
       height: 40%;
       border-left: none;
       border-top: 1px solid var(--divider-color);
+    }
+    .idle-wrap[hidden],
+    .side fp-room-sidebar[hidden] {
+      display: none;
     }
     .side fp-room-sidebar {
       flex: 1;
