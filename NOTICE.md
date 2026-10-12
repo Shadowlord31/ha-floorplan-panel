@@ -60,3 +60,5 @@ In `frontend/src/ef/editor.ts` und `types.ts` sind folgende Zusätze mit dem Kom
 Drei und vier Flügel für Fenster/Türen (`sash: "triple" | "quad"`, `extraEntities`) in `frontend/src/ef/types.ts`, `render.ts`, `floorplan-card.ts`, `editor-forms.ts` und `editor.ts`, jeweils mit dem Kommentar `floorplan-panel` markiert.
 
 Ab v0.17.0 zusätzlich: Anschlag je Flügel (`leafHinges`) in `types.ts`, `render.ts`, `editor-forms.ts`, `editor.ts` (markiert mit `floorplan-panel`).
+
+Ab v0.18.0 zusätzlich: Panel-Modus des Editors (`panelMode`, `panelError`, Ereignis `ef-done`; immer Vollbild, "Fertig" statt "Expand") in `frontend/src/ef/editor.ts` (markiert mit `floorplan-panel`).

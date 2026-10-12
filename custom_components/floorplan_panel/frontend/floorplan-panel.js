@@ -14457,12 +14457,12 @@ function Qs(e) {
 }
 let I = class extends te {
   constructor() {
-    super(...arguments), this._wallMaskId = `fp-edit-wall-mask-${I._nextWallMaskId++}`, this._watchedEntities = /* @__PURE__ */ new Set(), this._tool = "select", this._selection = [], this._draft = null, this._draftTracker = null, this._areaShape = "polygon", this._draftArea = null, this._areaHover = null, this._freeWalls = !1, this._defaultOpeningLength = 60, this._marquee = null, this._history = [], this._future = [], this._zoom = 1, this._floorMenuOpen = !1, this._addMenuOpen = !1, this._addQuery = "", this._symbolDraft = "", this._symbolError = "", this._paletteError = "", this._projectOpen = !1, this._openGroups = /* @__PURE__ */ new Set(), this._fullscreen = !1, this._applyState = "idle", this._applyError = "", this._applyResetTimer = null, this._drag = null, this._dragMoves = new Ag(Eg, (e) => {
+    super(...arguments), this._wallMaskId = `fp-edit-wall-mask-${I._nextWallMaskId++}`, this.panelMode = !1, this.panelError = "", this._watchedEntities = /* @__PURE__ */ new Set(), this._tool = "select", this._selection = [], this._draft = null, this._draftTracker = null, this._areaShape = "polygon", this._draftArea = null, this._areaHover = null, this._freeWalls = !1, this._defaultOpeningLength = 60, this._marquee = null, this._history = [], this._future = [], this._zoom = 1, this._floorMenuOpen = !1, this._addMenuOpen = !1, this._addQuery = "", this._symbolDraft = "", this._symbolError = "", this._paletteError = "", this._projectOpen = !1, this._openGroups = /* @__PURE__ */ new Set(), this._fullscreen = !1, this._applyState = "idle", this._applyError = "", this._applyResetTimer = null, this._drag = null, this._dragMoves = new Ag(Eg, (e) => {
       this._drag && this._applyDrag(e);
     }), this._dragDirty = !1, this._pickAnchor = null, this._hideLabels = !1, this._pinchPts = /* @__PURE__ */ new Map(), this._pinch = null, this._gesturePointer = null, this._marqueeAdd = !1, this._clipboard = null, this._onKeyDown = (e) => this._handleKeyDown(e), this._onHostKeyDown = (e) => {
       e.key !== "Escape" || !this._fullscreen || Qs(e.composedPath()) && (e.preventDefault(), e.stopPropagation(), this._canvasWrap?.focus({ preventScroll: !0 }));
     }, this._onFocusIn = (e) => {
-      this._fullscreen && !e.composedPath().includes(this) && (this._fullscreen = !1);
+      this._fullscreen && !this.panelMode && !e.composedPath().includes(this) && (this._fullscreen = !1);
     }, this._preventGesture = (e) => e.preventDefault(), this._onWrapPointerDown = (e) => {
       if (e.pointerType !== "touch" || (this._pinchPts.set(e.pointerId, { x: e.clientX, y: e.clientY }), this._pinchPts.size !== 2)) return;
       this._cancelGesture();
@@ -14515,6 +14515,9 @@ let I = class extends te {
       }
       this._patchConfig({ symbols: { ...this._config.symbols ?? {}, [i.id]: e } }), this._symbolDraft = "", this._symbolError = "";
     };
+  }
+  willUpdate() {
+    this.panelMode && !this._fullscreen && (this._fullscreen = !0);
   }
   connectedCallback() {
     super.connectedCallback(), window.addEventListener("keydown", this._onKeyDown, !0), this.addEventListener("keydown", this._onHostKeyDown), window.addEventListener("focusin", this._onFocusIn);
@@ -14840,7 +14843,7 @@ let I = class extends te {
     if (t && !t.call(this)) return;
     const i = e.composedPath();
     if (!i.includes(this)) {
-      this._fullscreen && e.key === "Escape" && (e.preventDefault(), e.stopPropagation(), this._fullscreen = !1);
+      this._fullscreen && !this.panelMode && e.key === "Escape" && (e.preventDefault(), e.stopPropagation(), this._fullscreen = !1);
       return;
     }
     if (Qs(i)) return;
@@ -14877,7 +14880,7 @@ let I = class extends te {
         e.preventDefault(), e.stopPropagation(), this._floorMenuOpen = !1, this._addMenuOpen = !1, this._addQuery = "";
         return;
       }
-      this._draft || this._draftTracker || this._draftArea || this._marquee || this._drag ? (e.preventDefault(), e.stopPropagation(), this._cancelGesture()) : this._selection.length ? (e.preventDefault(), e.stopPropagation(), this._clearSel()) : this._fullscreen && (e.preventDefault(), e.stopPropagation(), this._fullscreen = !1);
+      this._draft || this._draftTracker || this._draftArea || this._marquee || this._drag ? (e.preventDefault(), e.stopPropagation(), this._cancelGesture()) : this._selection.length ? (e.preventDefault(), e.stopPropagation(), this._clearSel()) : this._fullscreen && !this.panelMode && (e.preventDefault(), e.stopPropagation(), this._fullscreen = !1);
       return;
     }
     if ((e.key === "Delete" || e.key === "Backspace") && this._selection.length) {
@@ -16399,7 +16402,13 @@ let I = class extends te {
           <!-- Expand: break out of HA's narrow config dialog into a full-screen
                workspace. Kept next to the tools so it's reachable even when the
                toolbar wraps at dialog width. -->
-          <button
+          ${this.panelMode ? u`<button
+                class="apply-btn done-btn"
+                title="Änderungen speichern und zurück zur Ansicht"
+                @click=${() => this.dispatchEvent(new CustomEvent("ef-done", { bubbles: !0, composed: !0 }))}
+              >
+                <ha-icon icon="mdi:check-bold"></ha-icon> Fertig
+              </button>${this.panelError ? u`<span class="apply-error">${this.panelError}</span>` : f}` : u`<button
             class=${this._fullscreen ? "active expand-toggle" : "expand-toggle"}
             aria-pressed=${this._fullscreen}
             title=${this._fullscreen ? "Exit full screen (Esc)" : "Edit full screen — more room for the canvas"}
@@ -16407,7 +16416,7 @@ let I = class extends te {
           >
             <ha-icon icon=${this._fullscreen ? "mdi:fullscreen-exit" : "mdi:fullscreen"}></ha-icon>
             ${this._fullscreen ? "Exit" : "Expand"}
-          </button>
+          </button>`}
 
           <!-- Apply: save the plan to the dashboard and keep editing (issue
                #198). HA's own Save closes the dialog, and the preview beside
@@ -16993,7 +17002,7 @@ let I = class extends te {
   }
   /** Toggle the full-screen workspace. */
   _toggleFullscreen() {
-    this._fullscreen = !this._fullscreen, this._fullscreen && this._canvasWrap && (this._canvasWrap.style.width = "", this._canvasWrap.style.height = ""), this._floorMenuOpen = !1, this._addMenuOpen = !1, this._addQuery = "";
+    this.panelMode || (this._fullscreen = !this._fullscreen, this._fullscreen && this._canvasWrap && (this._canvasWrap.style.width = "", this._canvasWrap.style.height = ""), this._floorMenuOpen = !1, this._addMenuOpen = !1, this._addQuery = "");
   }
   /**
    * The "+ Add" popover: device, text, then every symbol as its real glyph.
@@ -19952,6 +19961,12 @@ P([
   A({ attribute: !1 })
 ], I.prototype, "hass", 2);
 P([
+  A({ type: Boolean })
+], I.prototype, "panelMode", 2);
+P([
+  A({ attribute: !1 })
+], I.prototype, "panelError", 2);
+P([
   k()
 ], I.prototype, "_config", 2);
 P([
@@ -20788,14 +20803,7 @@ let ye = class extends te {
   }
   render() {
     return this.edit ? u`
-      <div class="bar">
-        <button @click=${this._close}>Fertig</button>
-        <span class="status ${this._status}">
-          ${this._status === "saving" ? "Speichert …" : this._status === "saved" ? "Gespeichert" : this._error}
-        </span>
-      </div>
-      <fp-ef-editor @config-changed=${this._onConfigChanged}></fp-ef-editor>
-      ${f}
+      <fp-ef-editor .panelMode=${!0} .panelError=${this._status === "error" ? this._error : ""} @config-changed=${this._onConfigChanged} @ef-done=${this._close}></fp-ef-editor>
     ` : u`<fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
         ${this._room ? u`<fp-room-dialog .hass=${this.hass} .area=${this._room} @close=${() => this._room = void 0}></fp-room-dialog>` : f}`;
   }

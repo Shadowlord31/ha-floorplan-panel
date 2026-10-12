@@ -152,14 +152,7 @@ export class EfHost extends LitElement {
           ? html`<fp-room-dialog .hass=${this.hass} .area=${this._room} @close=${() => (this._room = undefined)}></fp-room-dialog>`
           : nothing}`;
     return html`
-      <div class="bar">
-        <button @click=${this._close}>Fertig</button>
-        <span class="status ${this._status}">
-          ${this._status === "saving" ? "Speichert …" : this._status === "saved" ? "Gespeichert" : this._error}
-        </span>
-      </div>
-      <fp-ef-editor @config-changed=${this._onConfigChanged}></fp-ef-editor>
-      ${nothing}
+      <fp-ef-editor .panelMode=${true} .panelError=${this._status === "error" ? this._error : ""} @config-changed=${this._onConfigChanged} @ef-done=${this._close}></fp-ef-editor>
     `;
   }
 

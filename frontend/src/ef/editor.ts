@@ -342,6 +342,9 @@ export class FloorplanCardEditor extends LitElement {
   private readonly _wallMaskId = `fp-edit-wall-mask-${FloorplanCardEditor._nextWallMaskId++}`;
 
   @property({ attribute: false }) public hass?: HomeAssistant;
+  /** floorplan-panel: embedded in the panel — always full screen, closed by "Fertig". */
+  @property({ type: Boolean }) public panelMode = false;
+  @property({ attribute: false }) public panelError = "";
   /** Entity ids this plan displays; used to skip irrelevant hass updates. */
   private _watchedEntities: Set<string> = new Set();
   @state() private _config!: FloorplanCardConfig;
@@ -475,8 +478,12 @@ export class FloorplanCardEditor extends LitElement {
     // While the fullscreen popover is up, anything that pulls focus outside the
     // editor (Tab past the last control, a dialog opening above) lands on UI
     // hidden behind the top layer. Collapse instead of leaving the user blind.
-    if (this._fullscreen && !ev.composedPath().includes(this)) this._fullscreen = false;
+    if (this._fullscreen && !this.panelMode && !ev.composedPath().includes(this)) this._fullscreen = false;
   };
+
+  protected willUpdate(): void {
+    if (this.panelMode && !this._fullscreen) this._fullscreen = true;
+  }
 
   public connectedCallback(): void {
     super.connectedCallback();
@@ -1098,7 +1105,7 @@ export class FloorplanCardEditor extends LitElement {
       // collapse it rather than reach — and close — HA's dialog hidden
       // underneath. A dialog stacked above us is unaffected: it takes focus,
       // and the focusin guard has already collapsed fullscreen by then.
-      if (this._fullscreen && ev.key === "Escape") {
+      if (this._fullscreen && !this.panelMode && ev.key === "Escape") {
         ev.preventDefault();
         ev.stopPropagation();
         this._fullscreen = false;
@@ -1191,7 +1198,7 @@ export class FloorplanCardEditor extends LitElement {
         ev.preventDefault();
         ev.stopPropagation();
         this._clearSel();
-      } else if (this._fullscreen) {
+      } else if (this._fullscreen && !this.panelMode) {
         // Nothing left to cancel — collapse the full-screen workspace before
         // letting a further Escape reach (and close) HA's edit dialog.
         ev.preventDefault();
@@ -3385,7 +3392,15 @@ export class FloorplanCardEditor extends LitElement {
           <!-- Expand: break out of HA's narrow config dialog into a full-screen
                workspace. Kept next to the tools so it's reachable even when the
                toolbar wraps at dialog width. -->
-          <button
+          ${this.panelMode
+            ? html`<button
+                class="apply-btn done-btn"
+                title="Änderungen speichern und zurück zur Ansicht"
+                @click=${() => this.dispatchEvent(new CustomEvent("ef-done", { bubbles: true, composed: true }))}
+              >
+                <ha-icon icon="mdi:check-bold"></ha-icon> Fertig
+              </button>${this.panelError ? html`<span class="apply-error">${this.panelError}</span>` : nothing}`
+            : html`<button
             class=${this._fullscreen ? "active expand-toggle" : "expand-toggle"}
             aria-pressed=${this._fullscreen}
             title=${this._fullscreen ? "Exit full screen (Esc)" : "Edit full screen — more room for the canvas"}
@@ -3393,7 +3408,7 @@ export class FloorplanCardEditor extends LitElement {
           >
             <ha-icon icon=${this._fullscreen ? "mdi:fullscreen-exit" : "mdi:fullscreen"}></ha-icon>
             ${this._fullscreen ? "Exit" : "Expand"}
-          </button>
+          </button>`}
 
           <!-- Apply: save the plan to the dashboard and keep editing (issue
                #198). HA's own Save closes the dialog, and the preview beside
@@ -4112,6 +4127,7 @@ export class FloorplanCardEditor extends LitElement {
 
   /** Toggle the full-screen workspace. */
   private _toggleFullscreen(): void {
+    if (this.panelMode) return;
     this._fullscreen = !this._fullscreen;
     if (this._fullscreen && this._canvasWrap) {
       // A drag-resized canvas carries inline width/height that would defeat
