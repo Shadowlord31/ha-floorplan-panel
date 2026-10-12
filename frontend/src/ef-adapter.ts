@@ -29,6 +29,8 @@ const CARD_TYPES: [string, string][] = [
   ["light", "Licht"],
   ["markdown", "Markdown"],
   ["button", "Button"],
+  ["vertical-stack", "Stapel (vertikal)"],
+  ["horizontal-stack", "Stapel (horizontal)"],
 ];
 
 type CardConfig = Record<string, unknown>;
@@ -354,6 +356,7 @@ export class EfHost extends LitElement {
     try {
       const el: any = await ctor.getConfigElement();
       el.hass = this.hass;
+      el.lovelace = { views: [] }; // hui-card-picker (Stack-Editor) rendert ohne lovelace nichts
       el.setConfig(config);
       el.addEventListener("config-changed", (ev: Event) => {
         ev.stopPropagation();

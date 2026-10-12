@@ -19052,7 +19052,9 @@ const mn = "floorplan_panel", ma = 800, c_ = 700, d_ = [
   ["sensor", "Sensor"],
   ["light", "Licht"],
   ["markdown", "Markdown"],
-  ["button", "Button"]
+  ["button", "Button"],
+  ["vertical-stack", "Stapel (vertikal)"],
+  ["horizontal-stack", "Stapel (horizontal)"]
 ], h_ = 5 * 60 * 1e3, p_ = "custom:fp-ef-card";
 function u_(e) {
   return e?.ef ? structuredClone(e.ef) : { type: p_ };
@@ -19224,7 +19226,7 @@ let X = class extends ce {
     if (r)
       try {
         const o = await i.getConfigElement();
-        o.hass = this.hass, o.setConfig(t), o.addEventListener("config-changed", (a) => {
+        o.hass = this.hass, o.lovelace = { views: [] }, o.setConfig(t), o.addEventListener("config-changed", (a) => {
           a.stopPropagation();
           const s = a.detail?.config;
           s && (this._cardsDraft = this._cardsDraft.map((l, c) => c === e ? s : l));
