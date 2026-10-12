@@ -21,6 +21,23 @@ import { parseEfImport, type EfImport } from "./ef-import";
 const DOMAIN = "floorplan_panel";
 const SAVE_DELAY_MS = 800;
 const NARROW_PX = 700;
+const CARD_TYPES: [string, string][] = [
+  ["entities", "Entities"],
+  ["glance", "Glance"],
+  ["weather-forecast", "Wettervorhersage"],
+  ["sensor", "Sensor"],
+  ["light", "Licht"],
+  ["markdown", "Markdown"],
+  ["button", "Button"],
+];
+
+type CardConfig = Record<string, unknown>;
+interface CardEdit {
+  index: number;
+  yaml: boolean;
+  yamlText: string;
+  error: string;
+}
 const AUTO_RESET_MS = 5 * 60 * 1000;
 export const EF_TYPE = "custom:fp-ef-card";
 
@@ -56,8 +73,11 @@ export class EfHost extends LitElement {
   private _ro?: ResizeObserver;
   @state() private _importText = "";
   @state() private _importError = "";
-  @state() private _cardsText = "";
+  @state() private _cardsDraft: CardConfig[] = [];
   @state() private _cardsError = "";
+  @state() private _cardEdit?: CardEdit;
+  @state() private _addType = "entities";
+  @state() private _customType = "";
 
   private _pending?: EfConfig;
   private _timer?: ReturnType<typeof setTimeout>;
@@ -264,24 +284,106 @@ export class EfHost extends LitElement {
   }
 
   private _openCards = (): void => {
-    const cards = this._sidebarCards();
-    this._cardsText = cards.length ? dump(cards, { lineWidth: 100 }) : "";
+    this._cardsDraft = structuredClone(this._sidebarCards());
     this._cardsError = "";
+    this._cardEdit = undefined;
     this._cardsDialog()?.showModal();
   };
 
-  private async _saveCards(): Promise<void> {
-    let cards: unknown = [];
+  private _moveCard(i: number, d: number): void {
+    const list = [...this._cardsDraft];
+    const j = i + d;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    this._cardsDraft = list;
+  }
+
+  private _removeCard(i: number): void {
+    this._cardsDraft = this._cardsDraft.filter((_, k) => k !== i);
+  }
+
+  private _cardLabel(c: CardConfig): string {
+    const t = String(c.type ?? "?").replace(/^custom:/, "");
+    const title = c.title ?? c.name;
+    return title ? `${t} – ${title}` : t;
+  }
+
+  /** Karten-Klasse über die öffentliche loadCardHelpers-Schnittstelle laden (lädt eingebaute Karten lazy nach). */
+  private async _cardCtor(type: string): Promise<any> {
+    const tag = type.startsWith("custom:") ? type.slice(7) : `hui-${type}-card`;
     try {
-      cards = this._cardsText.trim() ? load(this._cardsText) : [];
-    } catch (err: any) {
-      this._cardsError = "YAML ungültig: " + (err?.message ?? err);
+      const helpers = await (window as unknown as { loadCardHelpers?: () => Promise<any> }).loadCardHelpers?.();
+      helpers?.createCardElement({ type, entities: [] });
+    } catch {
+      /* Typ unbekannt – unten greift der YAML-Fallback */
+    }
+    await Promise.race([customElements.whenDefined(tag), new Promise((r) => setTimeout(r, 3000))]);
+    return customElements.get(tag);
+  }
+
+  private async _addCard(): Promise<void> {
+    if (this._addType === "__yaml") {
+      this._cardsDraft = [...this._cardsDraft, { type: "" }];
+      this._cardEdit = { index: this._cardsDraft.length - 1, yaml: true, yamlText: "type: ", error: "" };
       return;
     }
-    if (!Array.isArray(cards) || cards.some((c) => !c || typeof c !== "object" || !(c as any).type)) {
-      this._cardsError = "Erwartet wird eine Liste von Karten, jede mit `type:`.";
-      return;
+    const type = this._addType === "__custom" ? this._customType.trim() : this._addType;
+    if (!type) return;
+    const full = this._addType === "__custom" && !type.startsWith("custom:") ? `custom:${type}` : type;
+    const ctor = await this._cardCtor(full);
+    let config: CardConfig = { type: full };
+    try {
+      const stub = await ctor?.getStubConfig?.(this.hass, Object.keys(this.hass.states ?? {}), []);
+      if (stub && typeof stub === "object") config = { ...stub, type: full };
+    } catch {
+      /* Stub optional */
     }
+    this._cardsDraft = [...this._cardsDraft, config];
+    await this._editCard(this._cardsDraft.length - 1);
+  }
+
+  private async _editCard(i: number): Promise<void> {
+    const config = this._cardsDraft[i];
+    const ctor = await this._cardCtor(String(config.type ?? ""));
+    const hasEditor = typeof ctor?.getConfigElement === "function";
+    this._cardEdit = { index: i, yaml: !hasEditor, yamlText: dump(config, { lineWidth: 100 }), error: "" };
+    if (!hasEditor) return;
+    await this.updateComplete;
+    const host = this.renderRoot.querySelector<HTMLElement>(".card-editor-host");
+    if (!host) return;
+    try {
+      const el: any = await ctor.getConfigElement();
+      el.hass = this.hass;
+      el.setConfig(config);
+      el.addEventListener("config-changed", (ev: Event) => {
+        ev.stopPropagation();
+        const c = (ev as CustomEvent<{ config?: CardConfig }>).detail?.config;
+        if (c) this._cardsDraft = this._cardsDraft.map((x, k) => (k === i ? c : x));
+      });
+      host.replaceChildren(el);
+    } catch {
+      this._cardEdit = { index: i, yaml: true, yamlText: dump(config, { lineWidth: 100 }), error: "" };
+    }
+  }
+
+  private _finishCardEdit(): void {
+    const e = this._cardEdit;
+    if (!e) return;
+    if (e.yaml) {
+      try {
+        const c = load(e.yamlText) as CardConfig;
+        if (!c || typeof c !== "object" || Array.isArray(c) || !c.type) throw new Error("Eine Karte braucht `type:`.");
+        this._cardsDraft = this._cardsDraft.map((x, k) => (k === e.index ? c : x));
+      } catch (err: any) {
+        this._cardEdit = { ...e, error: err?.message ?? String(err) };
+        return;
+      }
+    }
+    this._cardEdit = undefined;
+  }
+
+  private async _saveCards(): Promise<void> {
+    const cards = this._cardsDraft.filter((c) => c && c.type);
     try {
       const settings = { ...((this._plan?.settings as object) ?? {}), sidebarCards: cards };
       const res = await this.hass.callWS<{ plan: RawPlan; revision: number }>({
@@ -298,6 +400,60 @@ export class EfHost extends LitElement {
     } catch (err: any) {
       this._cardsError = err?.message ?? String(err);
     }
+  }
+
+  private _renderCardsDialog() {
+    const e = this._cardEdit;
+    return html`<dialog class="import cards">
+      <h3>Karten der Übersicht</h3>
+      ${e
+        ? html`<p>${this._cardLabel(this._cardsDraft[e.index] ?? {})}</p>
+            ${e.yaml
+              ? html`<p>Für diesen Kartentyp gibt es keinen Editor – Konfiguration als YAML:</p>
+                  <textarea
+                    rows="12"
+                    .value=${e.yamlText}
+                    @input=${(ev: Event) => (this._cardEdit = { ...e, yamlText: (ev.target as HTMLTextAreaElement).value })}
+                  ></textarea>`
+              : html`<div class="card-editor-host"></div>`}
+            ${e.error ? html`<div class="err">${e.error}</div>` : nothing}
+            <div class="row"><button class="primary" @click=${() => this._finishCardEdit()}>Fertig</button></div>`
+        : html`<p>
+              Karten, die in der Seitenleiste angezeigt werden, solange kein Raum aktiv ist. Ohne Karten erscheint die
+              Raumliste.
+            </p>
+            <ul class="card-list">
+              ${this._cardsDraft.map(
+                (c, i) => html`<li>
+                  <span>${this._cardLabel(c)}</span>
+                  <button title="Nach oben" ?disabled=${i === 0} @click=${() => this._moveCard(i, -1)}>↑</button>
+                  <button title="Nach unten" ?disabled=${i === this._cardsDraft.length - 1} @click=${() => this._moveCard(i, 1)}>↓</button>
+                  <button @click=${() => void this._editCard(i)}>Bearbeiten</button>
+                  <button @click=${() => this._removeCard(i)}>Entfernen</button>
+                </li>`
+              )}
+            </ul>
+            <div class="row add">
+              <select @change=${(ev: Event) => (this._addType = (ev.target as HTMLSelectElement).value)}>
+                ${CARD_TYPES.map(([v, l]) => html`<option value=${v} ?selected=${this._addType === v}>${l}</option>`)}
+                <option value="__custom" ?selected=${this._addType === "__custom"}>Custom Card (Typ eingeben)</option>
+                <option value="__yaml" ?selected=${this._addType === "__yaml"}>Anderer Typ (YAML)</option>
+              </select>
+              ${this._addType === "__custom"
+                ? html`<input
+                    placeholder="z. B. mushroom-entity-card"
+                    .value=${this._customType}
+                    @input=${(ev: Event) => (this._customType = (ev.target as HTMLInputElement).value)}
+                  />`
+                : nothing}
+              <button @click=${() => void this._addCard()}>Karte hinzufügen</button>
+            </div>
+            ${this._cardsError ? html`<div class="err">${this._cardsError}</div>` : nothing}
+            <div class="row">
+              <button @click=${() => this._cardsDialog()?.close()}>Abbrechen</button>
+              <button class="primary" @click=${() => void this._saveCards()}>Speichern</button>
+            </div>`}
+    </dialog>`;
   }
 
   private _renderIdle() {
@@ -341,24 +497,7 @@ export class EfHost extends LitElement {
     if (!this.edit)
       return html`<div class="layout ${this._narrow ? "narrow" : ""}">
         <fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
-        <dialog class="import cards">
-          <h3>Karten der Übersicht</h3>
-          <p>
-            Liste von Lovelace-Karten (YAML), die in der Seitenleiste angezeigt werden, solange kein Raum aktiv ist.
-            Leer lassen für die automatische Raumliste.
-          </p>
-          <textarea
-            rows="14"
-            placeholder="- type: entities&#10;  entities:&#10;    - light.wohnzimmer"
-            .value=${this._cardsText}
-            @input=${(e: Event) => (this._cardsText = (e.target as HTMLTextAreaElement).value)}
-          ></textarea>
-          ${this._cardsError ? html`<div class="err">${this._cardsError}</div>` : nothing}
-          <div class="row">
-            <button @click=${() => this._cardsDialog()?.close()}>Abbrechen</button>
-            <button class="primary" @click=${() => void this._saveCards()}>Speichern</button>
-          </div>
-        </dialog>
+        ${this._renderCardsDialog()}
         <aside class="side" @pointerdown=${this._armResetTimer} @keydown=${this._armResetTimer} @change=${this._armResetTimer}>
           ${this._room
             ? html`<fp-room-sidebar
@@ -447,6 +586,34 @@ export class EfHost extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    dialog.cards .card-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    dialog.cards .card-list li {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    dialog.cards .card-list li span {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    dialog.cards .row.add {
+      justify-content: flex-start;
+      align-items: center;
+    }
+    dialog.cards select,
+    dialog.cards input {
+      font: inherit;
+      padding: 4px 8px;
     }
     .idle .cards-edit {
       align-self: flex-start;
