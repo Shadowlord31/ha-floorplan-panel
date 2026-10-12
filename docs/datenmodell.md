@@ -145,3 +145,7 @@ Seit v0.13.0 gibt es im Panel einen zweiten Modus auf Basis des Quellcodes von e
 - Sensoren: Flügel 1 = `entity`, Flügel 2 = `secondaryEntity`, Flügel 3/4 = `extraEntities[0..1]`. Ein Flügel ohne Sensor folgt Flügel 1.
 - Bei 3/4 Flügeln gelten keine Einzelbreiten/-anschläge; der Lichtschein nutzt die zentrierte Näherung.
 - `leafHinges` (ab v0.17.0): Anschlag je Flügel, von links nach rechts (`left` | `right` | leer = Standard). `flipH` spiegelt weiterhin die ganze Öffnung.
+
+## Import (ab v0.19.0)
+
+Im Editor-Panel gibt es „Import“: YAML/JSON einer `custom:easy-floorplan-card` (auch als Dashboard-Ausschnitt) wird gelesen, `type` auf `custom:fp-ef-card` gesetzt, der Rest 1:1 als `plan.ef` übernommen. Ergebnis ist nur ein Entwurf im Editor; gespeichert wird erst mit „Apply“/„Fertig“. Seitenleisten und Raumtypen bleiben leer.

@@ -62,3 +62,5 @@ Drei und vier Flügel für Fenster/Türen (`sash: "triple" | "quad"`, `extraEnti
 Ab v0.17.0 zusätzlich: Anschlag je Flügel (`leafHinges`) in `types.ts`, `render.ts`, `editor-forms.ts`, `editor.ts` (markiert mit `floorplan-panel`).
 
 Ab v0.18.0 zusätzlich: Panel-Modus des Editors (`panelMode`, `panelError`, Ereignis `ef-done`; immer Vollbild, "Fertig" statt "Expand") in `frontend/src/ef/editor.ts` (markiert mit `floorplan-panel`).
+
+Ab v0.19.0 zusätzlich: einmaliger Import einer bestehenden easy-floorplan-Konfiguration (`frontend/src/ef-import.ts`, Dialog in `ef-adapter.ts`, Knopf „Import“ im Panel-Modus des Editors). Neue Abhängigkeit: js-yaml (MIT).

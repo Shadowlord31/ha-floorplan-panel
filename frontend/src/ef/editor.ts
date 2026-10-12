@@ -3399,6 +3399,13 @@ export class FloorplanCardEditor extends LitElement {
                 @click=${() => this.dispatchEvent(new CustomEvent("ef-done", { bubbles: true, composed: true }))}
               >
                 <ha-icon icon="mdi:check-bold"></ha-icon> Fertig
+              </button>
+              <button
+                class="apply-btn"
+                title="Bestehende easy-floorplan-Konfiguration einmalig importieren"
+                @click=${() => this.dispatchEvent(new CustomEvent("ef-import-request", { bubbles: true, composed: true }))}
+              >
+                <ha-icon icon="mdi:file-import-outline"></ha-icon> Import
               </button>${this.panelError ? html`<span class="apply-error">${this.panelError}</span>` : nothing}`
             : html`<button
             class=${this._fullscreen ? "active expand-toggle" : "expand-toggle"}

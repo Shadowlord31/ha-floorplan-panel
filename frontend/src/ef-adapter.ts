@@ -15,6 +15,7 @@ import "./ef/editor";
 import "./room-dialog";
 import type { HomeAssistant } from "./ha";
 import type { Area as PanelArea } from "./types";
+import { parseEfImport, type EfImport } from "./ef-import";
 
 const DOMAIN = "floorplan_panel";
 const SAVE_DELAY_MS = 800;
@@ -42,6 +43,8 @@ export class EfHost extends LitElement {
   @state() private _status: "" | "saving" | "saved" | "error" = "";
   @state() private _error = "";
   @state() private _room?: PanelArea;
+  @state() private _importText = "";
+  @state() private _importError = "";
 
   private _pending?: EfConfig;
   private _timer?: ReturnType<typeof setTimeout>;
@@ -134,6 +137,36 @@ export class EfHost extends LitElement {
     this._room = a && a.sidebar?.length ? { ...a, name: a.name ?? "", sidebar: a.sidebar } : undefined;
   };
 
+  private _dialog(): HTMLDialogElement | null {
+    return this.renderRoot.querySelector<HTMLDialogElement>("dialog.import");
+  }
+
+  private _openImport = (): void => {
+    this._importText = "";
+    this._importError = "";
+    this._dialog()?.showModal();
+  };
+
+  private async _onImportFile(ev: Event): Promise<void> {
+    const file = (ev.target as HTMLInputElement).files?.[0];
+    if (file) this._importText = await file.text();
+  }
+
+  private _applyImport(): void {
+    let res: EfImport;
+    try {
+      res = parseEfImport(this._importText);
+    } catch (err: any) {
+      this._importError = err.message;
+      return;
+    }
+    const editor = this.renderRoot.querySelector<CardLike>("fp-ef-editor");
+    editor?.setConfig(res.config);
+    // Nur ein Entwurf: gespeichert wird erst mit „Apply“ oder „Fertig“.
+    this._pending = res.config;
+    this._dialog()?.close();
+  }
+
   private async _close(): Promise<void> {
     if (this._pending) {
       try {
@@ -152,7 +185,33 @@ export class EfHost extends LitElement {
           ? html`<fp-room-dialog .hass=${this.hass} .area=${this._room} @close=${() => (this._room = undefined)}></fp-room-dialog>`
           : nothing}`;
     return html`
-      <fp-ef-editor .panelMode=${true} .panelError=${this._status === "error" ? this._error : ""} @config-changed=${this._onConfigChanged} @ef-done=${this._close}></fp-ef-editor>
+      <fp-ef-editor
+        .panelMode=${true}
+        .panelError=${this._status === "error" ? this._error : ""}
+        @config-changed=${this._onConfigChanged}
+        @ef-done=${this._close}
+        @ef-import-request=${this._openImport}
+      ></fp-ef-editor>
+      <dialog class="import">
+        <h3>easy-floorplan-Konfiguration importieren</h3>
+        <p>
+          YAML oder JSON einer bestehenden <code>custom:easy-floorplan-card</code> einfügen oder als Datei wählen.
+          Das Ergebnis ersetzt den aktuellen Entwurf im Editor und wird erst mit „Apply“ oder „Fertig“ gespeichert.
+          Die alte Karte wird nicht verändert.
+        </p>
+        <input type="file" accept=".yaml,.yml,.json,.txt" @change=${this._onImportFile} />
+        <textarea
+          rows="12"
+          placeholder="type: custom:easy-floorplan-card …"
+          .value=${this._importText}
+          @input=${(e: Event) => (this._importText = (e.target as HTMLTextAreaElement).value)}
+        ></textarea>
+        ${this._importError ? html`<div class="err">${this._importError}</div>` : nothing}
+        <div class="row">
+          <button @click=${() => this._dialog()?.close()}>Abbrechen</button>
+          <button class="primary" ?disabled=${!this._importText.trim()} @click=${this._applyImport}>Als Entwurf laden</button>
+        </div>
+      </dialog>
     `;
   }
 
@@ -168,6 +227,45 @@ export class EfHost extends LitElement {
       flex: 1;
       display: block;
       overflow: auto;
+    }
+    dialog.import {
+      width: min(640px, 92vw);
+      border: 1px solid var(--divider-color);
+      border-radius: 12px;
+      background: var(--card-background-color, #fff);
+      color: var(--primary-text-color);
+    }
+    dialog.import textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font: 12px monospace;
+      margin-top: 8px;
+    }
+    dialog.import .row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    dialog.import button {
+      font: inherit;
+      border: 1px solid var(--primary-color);
+      background: transparent;
+      color: var(--primary-color);
+      border-radius: 16px;
+      padding: 4px 16px;
+      cursor: pointer;
+    }
+    dialog.import button.primary {
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    dialog.import button:disabled {
+      opacity: 0.5;
+    }
+    dialog.import .err {
+      color: var(--error-color, #db4437);
+      margin-top: 8px;
     }
     .bar {
       display: flex;
