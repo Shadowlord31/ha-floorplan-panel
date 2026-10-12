@@ -1802,6 +1802,8 @@ export interface FloorplanCardConfig extends LovelaceCardConfig {
    * markup here to sanitise — see `symbols.ts`.
    */
   symbols?: Record<string, unknown>;
+  /** floorplan-panel: saved selections ("Vorlagen") that can be inserted again. */
+  templates?: { id: string; name: string; data: Record<string, unknown[]> }[];
 }
 
 export const DEFAULT_WIDTH = 1000;

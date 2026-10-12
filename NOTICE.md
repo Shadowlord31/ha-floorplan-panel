@@ -50,3 +50,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Eigene Erweiterungen in den übernommenen Dateien (v0.15.0)
+
+In `frontend/src/ef/editor.ts` und `types.ts` sind folgende Zusätze mit dem Kommentar `floorplan-panel` markiert: Vorlagen (`config.templates`), Ausrichtungslinien (`_alignedSnap`) und Kontextmenü (`_renderContextMenu`).

@@ -292,6 +292,8 @@ interface Clipboard {
 
 /** Snap distance (virtual units) for openings onto walls. */
 const WALL_SNAP = 35;
+/** floorplan-panel: capture distance (virtual units) for alignment guides. */
+const ALIGN_SNAP = 12;
 /**
  * How far the pointer may move between clicks and still count as "the same
  * spot" for click-cycling (issue #52), in **screen pixels**.
@@ -808,6 +810,49 @@ export class FloorplanCardEditor extends LitElement {
     return patch;
   }
 
+  // floorplan-panel: alignment guides (Ausrichtungslinien)
+  @state() private _guides: { axis: "x" | "y"; value: number }[] = [];
+
+  private _setGuides(g: { axis: "x" | "y"; value: number }[]): void {
+    if (JSON.stringify(g) !== JSON.stringify(this._guides)) this._guides = g;
+  }
+
+  /** Snap to the step, but pull onto the x/y of a nearby wall end or room corner and remember the guide lines. */
+  private _alignedSnap(
+    rawX: number,
+    rawY: number,
+    skip?: (p: { x: number; y: number }) => boolean
+  ): { x: number; y: number } {
+    const f = this._floor();
+    let x = this._snap(rawX);
+    let y = this._snap(rawY);
+    if (this._resolvedSnap <= 0) {
+      this._setGuides([]);
+      return { x, y };
+    }
+    const refs: { x: number; y: number }[] = [];
+    for (const w of f.walls) refs.push({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+    for (const a of f.areas ?? []) for (const p of a.points) refs.push(p);
+    const guides: { axis: "x" | "y"; value: number }[] = [];
+    let dx = ALIGN_SNAP;
+    let dy = ALIGN_SNAP;
+    for (const r of refs) {
+      if (skip?.(r)) continue;
+      if (Math.abs(r.x - rawX) <= dx) {
+        dx = Math.abs(r.x - rawX);
+        x = r.x;
+        guides[0] = { axis: "x", value: r.x };
+      }
+      if (Math.abs(r.y - rawY) <= dy) {
+        dy = Math.abs(r.y - rawY);
+        y = r.y;
+        guides[1] = { axis: "y", value: r.y };
+      }
+    }
+    this._setGuides(guides.filter(Boolean));
+    return { x, y };
+  }
+
   private _snap(v: number): number {
     const s = this._resolvedSnap;
     return s > 0 ? Math.round(v / s) * s : v;
@@ -828,7 +873,7 @@ export class FloorplanCardEditor extends LitElement {
 
   /** Snap a raw point to a nearby existing wall endpoint, else to the snap step. */
   private _snapWallPoint(rawX: number, rawY: number): { x: number; y: number } {
-    return this._nearestCorner(rawX, rawY) ?? { x: this._snap(rawX), y: this._snap(rawY) };
+    return this._nearestCorner(rawX, rawY) ?? this._alignedSnap(rawX, rawY);
   }
 
   /**
@@ -843,10 +888,11 @@ export class FloorplanCardEditor extends LitElement {
     exclude?: { areaId: string; vertexIndex: number }
   ): AreaPoint {
     return (
-      nearestAreaSnapPoint(this._floor(), rawX, rawY, ENDPOINT_SNAP, exclude) ?? {
-        x: this._snap(rawX),
-        y: this._snap(rawY),
-      }
+      nearestAreaSnapPoint(this._floor(), rawX, rawY, ENDPOINT_SNAP, exclude) ??
+      this._alignedSnap(rawX, rawY, (r) => {
+        const pts = exclude ? this._floor().areas?.find((a) => a.id === exclude.areaId)?.points : undefined;
+        return !!pts && pts[exclude!.vertexIndex] === r;
+      })
     );
   }
 
@@ -874,7 +920,16 @@ export class FloorplanCardEditor extends LitElement {
         }
       }
     }
-    return best ?? { x: this._snap(rawX), y: this._snap(rawY) };
+    return (
+      best ??
+      this._alignedSnap(rawX, rawY, (r) =>
+        this._floor().walls.some(
+          (w) =>
+            (moving.has(`${w.id}:1`) && w.x1 === r.x && w.y1 === r.y) ||
+            (moving.has(`${w.id}:2`) && w.x2 === r.x && w.y2 === r.y)
+        )
+      )
+    );
   }
 
   /** See {@link snapWallEnd}: corners win, then axis gravity, then the snap step. */
@@ -884,7 +939,7 @@ export class FloorplanCardEditor extends LitElement {
     rawX: number,
     rawY: number
   ): { x: number; y: number } {
-    return snapWallEnd(
+    const r = snapWallEnd(
       this._floor().walls,
       x1,
       y1,
@@ -895,6 +950,17 @@ export class FloorplanCardEditor extends LitElement {
       WALL_AXIS_SNAP_DEG,
       ENDPOINT_SNAP
     );
+    if (this._nearestCorner(rawX, rawY)) {
+      this._setGuides([]);
+      return r;
+    }
+    const al = this._alignedSnap(rawX, rawY);
+    const guides = this._guides.filter((g) => (g.axis === "x" ? r.x !== x1 : r.y !== y1));
+    this._setGuides(guides);
+    return {
+      x: guides.some((g) => g.axis === "x") ? al.x : r.x,
+      y: guides.some((g) => g.axis === "y") ? al.y : r.y,
+    };
   }
 
   // ---- config mutation + history ----------------------------------------
@@ -1226,7 +1292,43 @@ export class FloorplanCardEditor extends LitElement {
     }
   }
 
+  // floorplan-panel: context menu (Kontextmenü)
+  @state() private _ctx: { x: number; y: number } | null = null;
+
+  private _onContextMenu = (ev: MouseEvent): void => {
+    ev.preventDefault();
+    if (this._tool !== "select") return;
+    this._ctx = { x: ev.clientX, y: ev.clientY };
+  };
+
+  private _renderContextMenu(): TemplateResult | typeof nothing {
+    const c = this._ctx;
+    if (!c) return nothing;
+    const has = this._selection.length > 0;
+    const f = this._floor();
+    const all = has && this._selection.every((x) => isLocked(f, x));
+    const item = (icon: string, label: string, fn: () => void, danger = false) => html`<button
+      class=${danger ? "danger" : ""}
+      @click=${() => {
+        this._ctx = null;
+        fn();
+      }}
+    ><ha-icon icon=${icon}></ha-icon>${label}</button>`;
+    return html`<div class="fp-ctx" style="left:${c.x}px;top:${c.y}px" @pointerdown=${(e: Event) => e.stopPropagation()}>
+      ${has
+        ? html`${item("mdi:content-duplicate", "Duplizieren", () => this._duplicate())}
+            ${item("mdi:content-copy", "Kopieren", () => this._copy())}
+            ${item("mdi:content-save-outline", "Als Vorlage speichern", () => this._saveTemplate())}
+            ${item(all ? "mdi:lock-open-variant-outline" : "mdi:lock", all ? "Entsperren" : "Fixieren", () => this._setLocked(!all))}`
+        : nothing}
+      ${this._clipboard ? item("mdi:content-paste", "Einfügen", () => this._paste()) : nothing}
+      ${has ? item("mdi:delete-outline", "Löschen", () => this._deleteSelected(), true) : nothing}
+      ${!has && !this._clipboard ? html`<span class="fp-ctx-empty">Nichts ausgewählt</span>` : nothing}
+    </div>`;
+  }
+
   private _onCanvasDown(ev: PointerEvent): void {
+    this._ctx = null;
     if (ev.button !== 0) return;
     // One gesture at a time: a second touch must not hijack the state machine.
     if (this._gesturePointer !== null) return;
@@ -1298,6 +1400,7 @@ export class FloorplanCardEditor extends LitElement {
    * between — is dropped, so a canceled drag leaves no trace in undo.
    */
   private _cancelGesture(): void {
+    this._guides = [];
     // Whatever the drag accumulated is about to be replaced by its snapshot.
     this._dragMoves.cancel();
     this._dragDirty = false;
@@ -1376,6 +1479,7 @@ export class FloorplanCardEditor extends LitElement {
 
   private _onCanvasUp(ev: PointerEvent): void {
     if (this._foreignPointer(ev)) return;
+    if (this._guides.length) this._guides = [];
     // Land on the last position the pointer reported, not on whatever the
     // previous frame caught — settle while _drag is still set.
     this._dragMoves.settle();
@@ -1466,6 +1570,12 @@ export class FloorplanCardEditor extends LitElement {
   private _startDrag(ev: PointerEvent, sel: Sel, endpoint?: 1 | 2, areaVertex?: number): void {
     if (this._tool !== "select") return;
     ev.stopPropagation();
+    this._ctx = null;
+    if (ev.button === 2) {
+      // floorplan-panel: right click only selects; the context menu opens on "contextmenu"
+      if (!this._isSel(sel.kind, sel.id)) this._selectOne(sel);
+      return;
+    }
     if (this._gesturePointer !== null) return;
     this._canvasWrap?.focus({ preventScroll: true });
     // Endpoint/vertex handles always operate on that single element; every
@@ -1936,6 +2046,59 @@ export class FloorplanCardEditor extends LitElement {
       ...newAreas.map((a) => ({ kind: "area" as const, id: a.id })),
     ];
     this._tool = "select";
+  }
+
+  // floorplan-panel: Vorlagen (saved selections, stored in config.templates)
+  private _saveTemplate(): void {
+    this._copy();
+    const cb = this._clipboard;
+    if (!cb) return;
+    const list = this._config.templates ?? [];
+    if (list.length >= 30) {
+      alert("Es sind höchstens 30 Vorlagen möglich.");
+      return;
+    }
+    const name = prompt("Name der Vorlage", "Vorlage " + (list.length + 1))?.trim();
+    if (!name) return;
+    this._commit({
+      ...this._config,
+      templates: [...list, { id: uid("tpl"), name, data: structuredClone(cb) as unknown as Record<string, unknown[]> }],
+    });
+  }
+
+  private _insertTemplate(id: string): void {
+    const t = this._config.templates?.find((x) => x.id === id);
+    if (!t) return;
+    const keep = this._clipboard;
+    this._clipboard = structuredClone(t.data) as unknown as Clipboard;
+    this._paste();
+    this._clipboard = keep;
+  }
+
+  private _deleteTemplate(id: string): void {
+    const list = (this._config.templates ?? []).filter((x) => x.id !== id);
+    const next = { ...this._config, templates: list.length ? list : undefined };
+    if (!list.length) delete next.templates;
+    this._commit(next);
+  }
+
+  private _renderTemplates(): TemplateResult {
+    const list = this._config.templates ?? [];
+    return html`<div class="fp-templates">
+      <h3 class="section-title">Vorlagen</h3>
+      ${list.length
+        ? list.map(
+            (t) => html`<div class="fp-tpl">
+              <button title="Auf dieser Etage einfügen" @click=${() => this._insertTemplate(t.id)}>
+                <ha-icon icon="mdi:shape-plus-outline"></ha-icon> ${t.name}
+              </button>
+              <button class="danger" aria-label="Delete template" @click=${() => this._deleteTemplate(t.id)}>
+                <ha-icon icon="mdi:delete-outline"></ha-icon>
+              </button>
+            </div>`
+          )
+        : html`<p class="hint">Mehrere Elemente auswählen und mit dem Vorlagen-Knopf speichern, um sie später wieder einzufügen.</p>`}
+    </div>`;
   }
 
   private _duplicate(): void {
@@ -3454,7 +3617,9 @@ export class FloorplanCardEditor extends LitElement {
             ? nothing
             : `aspect-ratio:${cssNumber(c.width, DEFAULT_WIDTH)} / ${cssNumber(c.height, DEFAULT_HEIGHT)};`}
           @wheel=${this._onCanvasWheel}
+          @contextmenu=${this._onContextMenu}
         >
+          ${this._renderContextMenu()}
           <!-- The stage doubles as the card's .plan box for overlay sizing: same
                container query, same --fp-u, so a badge measured in canvas units
                previews here at the size a card of this width would draw it
@@ -3595,6 +3760,11 @@ export class FloorplanCardEditor extends LitElement {
                   : nothing
               }
               ${this._renderAreaDraft()}
+              ${this._guides.map((g) =>
+                g.axis === "x"
+                  ? svg`<line class="fp-guide" x1=${g.value} x2=${g.value} y1="0" y2=${c.height} />`
+                  : svg`<line class="fp-guide" y1=${g.value} y2=${g.value} x1="0" x2=${c.width} />`
+              )}
               ${
                 this._marquee
                   ? svg`<rect x=${Math.min(this._marquee.x0, this._marquee.x1)}
@@ -4095,6 +4265,7 @@ export class FloorplanCardEditor extends LitElement {
           <h3 class="section-title">Element</h3>
           <p class="hint">Select an element on the canvas to edit its properties here.</p>
         </section>
+        ${this._renderTemplates()}
       `;
     }
     // Header names the selection and carries its actions, so everything about
@@ -4131,6 +4302,9 @@ export class FloorplanCardEditor extends LitElement {
               <ha-icon icon=${all ? "mdi:lock" : "mdi:lock-open-variant-outline"}></ha-icon>
             </button>`;
           })()}
+          <button aria-label="Save as template" title="Als Vorlage speichern" @click=${this._saveTemplate}>
+            <ha-icon icon="mdi:content-save-outline"></ha-icon>
+          </button>
           <button aria-label="Duplicate" title="Duplicate (Ctrl/Cmd+D)" @click=${this._duplicate}>
             <ha-icon icon="mdi:content-duplicate"></ha-icon>
           </button>
@@ -6822,6 +6996,60 @@ export class FloorplanCardEditor extends LitElement {
        off the panel entirely (issue #163), which is unreachable rather than
        merely ugly. So everything but the title refuses to shrink, and the
        title truncates instead — its full text stays available on hover. */
+    .fp-guide {
+      stroke: var(--primary-color, #03a9f4);
+      stroke-width: 1;
+      stroke-dasharray: 6 4;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+    .fp-ctx {
+      position: fixed;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      min-width: 180px;
+      padding: 4px;
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    .fp-ctx button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 0;
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .fp-ctx button:hover {
+      background: var(--secondary-background-color);
+    }
+    .fp-ctx button.danger {
+      color: var(--error-color, #db4437);
+    }
+    .fp-ctx ha-icon {
+      --mdc-icon-size: 18px;
+    }
+    .fp-ctx-empty {
+      padding: 6px 10px;
+      color: var(--secondary-text-color);
+    }
+    .fp-tpl {
+      display: flex;
+      gap: 6px;
+      margin: 4px 0;
+    }
+    .fp-tpl button:first-child {
+      flex: 1;
+      text-align: left;
+    }
     .edit-head {
       display: flex;
       align-items: center;
