@@ -7,10 +7,11 @@ import { property } from "lit/decorators.js";
 import { defineElement } from "./define";
 import "./entity-picker";
 import { entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
+import { axisRect } from "./geometry";
 import { AREA_TYPES } from "./types";
 
 type Entry = { entity: string; name?: string; icon?: string };
-type AreaLike = { type?: string; typeLabel?: string; sidebar?: Entry[] };
+type AreaLike = { points?: { x: number; y: number }[]; type?: string; typeLabel?: string; sidebar?: Entry[] };
 
 @defineElement("fp-ef-area-extras")
 export class FpEfAreaExtras extends LitElement {
@@ -43,8 +44,18 @@ export class FpEfAreaExtras extends LitElement {
     this._setSidebar(list);
   }
 
+  private _resize(width: number, height: number): void {
+    const pts = this.area.points;
+    const r = pts && axisRect(pts);
+    if (!pts || !r || !(width >= 1) || !(height >= 1)) return;
+    this._patch({
+      points: pts.map((p) => ({ x: p.x === r.x ? r.x : r.x + width, y: p.y === r.y ? r.y : r.y + height })),
+    });
+  }
+
   protected render() {
     const a = this.area;
+    const rect = a.points && axisRect(a.points);
     const list = this._list;
     return html`
       <label class="field">
@@ -62,6 +73,16 @@ export class FpEfAreaExtras extends LitElement {
               @change=${(ev: Event) => this._patch({ typeLabel: (ev.target as HTMLInputElement).value.trim() || undefined })}
             />
           </label>`
+        : nothing}
+      ${rect
+        ? html`<div class="dims">
+            <label class="field"><span>Width</span>
+              <input type="number" min="1" .value=${String(Math.round(rect.w))}
+                @change=${(ev: Event) => this._resize(Number((ev.target as HTMLInputElement).value), rect.h)} /></label>
+            <label class="field"><span>Height</span>
+              <input type="number" min="1" .value=${String(Math.round(rect.h))}
+                @change=${(ev: Event) => this._resize(rect.w, Number((ev.target as HTMLInputElement).value))} /></label>
+          </div>`
         : nothing}
       <h4>Sidebar</h4>
       <p class="muted">Only what is listed here appears when the room is tapped: devices, scenes and scripts.</p>
@@ -116,6 +137,11 @@ export class FpEfAreaExtras extends LitElement {
       color: var(--primary-text-color);
       box-sizing: border-box;
       width: 100%;
+    }
+    .dims {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
     h4 {
       margin: 12px 0 4px;
