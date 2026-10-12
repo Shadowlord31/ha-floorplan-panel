@@ -144,3 +144,4 @@ Seit v0.13.0 gibt es im Panel einen zweiten Modus auf Basis des Quellcodes von e
 - `sash`: `single` | `double` | `triple` | `quad` (1–4 gleich breite Flügel nebeneinander; alle links angeschlagen, der letzte rechts; Standard Fenster `double`, Tür `single`).
 - Sensoren: Flügel 1 = `entity`, Flügel 2 = `secondaryEntity`, Flügel 3/4 = `extraEntities[0..1]`. Ein Flügel ohne Sensor folgt Flügel 1.
 - Bei 3/4 Flügeln gelten keine Einzelbreiten/-anschläge; der Lichtschein nutzt die zentrierte Näherung.
+- `leafHinges` (ab v0.17.0): Anschlag je Flügel, von links nach rechts (`left` | `right` | leer = Standard). `flipH` spiegelt weiterhin die ganze Öffnung.

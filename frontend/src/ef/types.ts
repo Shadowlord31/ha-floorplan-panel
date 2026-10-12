@@ -255,6 +255,12 @@ export interface Opening {
    */
   extraEntities?: string[];
   /**
+   * floorplan-panel: hinge side per leaf, left to right, for hinged openings
+   * with two or more leaves. An empty or missing entry keeps the default
+   * (all left, the last one right). `flipH` still mirrors the whole opening.
+   */
+  leafHinges?: ("left" | "right" | "")[];
+  /**
    * Lets sunlight through even while shut. Defaults per type rather than to a
    * fixed value: a window is glass, a door is not.
    *

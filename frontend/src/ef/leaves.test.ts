@@ -52,3 +52,15 @@ describe("renderOpening leaves", () => {
     expect(leaves(win({ sash: "quad" }))).toBeGreaterThan(leaves(win({ sash: "triple" })));
   });
 });
+
+describe("leafHinges", () => {
+  const rights = (o: Opening) =>
+    (text(renderOpening(o, { color: "#888" } as never)).match(/fp-leaf-r/g) ?? []).length;
+  it("default: only the last leaf is hinged right", () => {
+    expect(rights(win({ sash: "quad" }))).toBe(1);
+  });
+  it("per-leaf override", () => {
+    expect(rights(win({ sash: "quad", leafHinges: ["right", "right", "left", "right"] }))).toBe(3);
+    expect(rights(win({ sash: "double", leafHinges: ["", "left"] }))).toBe(0);
+  });
+});

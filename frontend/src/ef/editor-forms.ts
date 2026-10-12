@@ -339,6 +339,15 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
     });
   }
   if (motion === "swing") {
+    const nHinged = openingLeafCount(o);
+    for (let i = 0; nHinged > 1 && i < nHinged; i++)
+      fields.push({
+        name: `leafHinge${i + 1}`,
+        label: `Hinge leaf ${i + 1}`,
+        selector: dropdown(opt("", "Default"), opt("left", "Left"), opt("right", "Right")),
+      });
+  }
+  if (motion === "swing") {
     fields.push({
       name: "opens",
       label: "Opens",
@@ -582,6 +591,10 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
       sash: openingSash(o),
       entity: o.entity ?? "",
       secondaryEntity: o.secondaryEntity ?? "",
+      leafHinge1: o.leafHinges?.[0] ?? "",
+      leafHinge2: o.leafHinges?.[1] ?? "",
+      leafHinge3: o.leafHinges?.[2] ?? "",
+      leafHinge4: o.leafHinges?.[3] ?? "",
       leaf3Entity: o.extraEntities?.[0] ?? "",
       leaf4Entity: o.extraEntities?.[1] ?? "",
       glazed: openingIsGlazed(o),
@@ -667,6 +680,7 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
           // nothing left to describe (issue #218).
           if (v !== "swing") out.sashSpan = undefined;
           if (v !== "swing") out.extraEntities = undefined;
+          if (v !== "swing") out.leafHinges = undefined;
           // The second leaf's sensor goes only if the opening this *becomes*
           // has no second leaf. Asked of the result rather than of the motion,
           // because since issue #159 a hinged double has one too: a two-sensor
@@ -690,6 +704,7 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
           // drive (issue #159).
           const nLeaves = openingLeafCount({ ...o, sash: v as OpeningSash, motion: "swing" } as Opening);
           if (nLeaves < 2) out.secondaryEntity = undefined;
+          if (nLeaves < 2) out.leafHinges = undefined;
           // floorplan-panel: fewer leaves than sensors — drop the surplus
           if (nLeaves < 3) out.extraEntities = undefined;
           else if (o.extraEntities && o.extraEntities.length > nLeaves - 2) {
@@ -699,6 +714,12 @@ export function openingForm(o: Opening, featuresOf: (entityId: string) => number
           // Two sashes already split the opening between them, so there is no
           // leftover pane for `sashSpan` to describe (issue #218).
           if (nLeaves > 1) out.sashSpan = undefined;
+        } else if (/^leafHinge[1-4]$/.test(k)) {
+          const prev = ((out as { leafHinges?: string[] }).leafHinges ?? o.leafHinges) as string[] | undefined;
+          const arr = [0, 1, 2, 3].map((i) => prev?.[i] ?? "");
+          arr[Number(k.slice(-1)) - 1] = (v as string) || "";
+          while (arr.length && !arr[arr.length - 1]) arr.pop();
+          out.leafHinges = arr.length ? arr : undefined;
         } else if (k === "leaf3Entity" || k === "leaf4Entity") {
           const prev = ((out as { extraEntities?: string[] }).extraEntities ?? o.extraEntities) as string[] | undefined;
           const arr = [0, 1].map((i) => prev?.[i] ?? "");

@@ -3446,7 +3446,7 @@ export function renderOpening(o: Opening, style: OpeningStyle): SVGTemplateResul
     const leafList = Array.from({ length: nLeaves }, (_, index) => {
       const amtI = index === 0 ? amt : index === 1 ? amt2 : (moreAmt[index - 2] ?? amt);
       const toneI = index === 0 ? tone : index === 1 ? tone2 : (moreTone[index - 2] ?? tone);
-      return { index, amt: amtI, tone: toneI, hingeRight: nLeaves > 1 && index === nLeaves - 1 };
+      return { index, amt: amtI, tone: toneI, hingeRight: nLeaves > 1 && (o.leafHinges?.[index] ? o.leafHinges[index] === "right" : index === nLeaves - 1) };
     });
     const arc = (d: string, tn: string, a: number) => svg`<path class="fp-door-arc" d=${d}
               fill="none" stroke-width="1.5" stroke-dasharray=${arcLen}
