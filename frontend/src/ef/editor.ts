@@ -1,5 +1,6 @@
+import { defineElement } from "../define";
 import { LitElement, html, css, svg, nothing, type TemplateResult, type PropertyValues } from "lit";
-import { customElement, property, state, query } from "lit/decorators.js";
+import { property, state, query } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import type {
@@ -335,7 +336,7 @@ function isTypingPath(path: EventTarget[]): boolean {
   });
 }
 
-@customElement("fp-ef-editor")
+@defineElement("fp-ef-editor")
 export class FloorplanCardEditor extends LitElement {
   private static _nextWallMaskId = 0;
   /** Unique mask id so multiple editor instances don't collide. */

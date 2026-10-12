@@ -1,5 +1,6 @@
+import { defineElement } from "../define";
 import { LitElement, html, css, svg, nothing, type TemplateResult, type PropertyValues } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import type {
@@ -166,7 +167,7 @@ function floorMemoryKey(floors: readonly Floor[]): string {
   return floors.map((f) => f.id).join("|");
 }
 
-@customElement("fp-ef-card")
+@defineElement("fp-ef-card")
 export class FloorplanCard extends LitElement {
   private static _nextWallMaskId = 0;
   private static _nextGlowId = 0;

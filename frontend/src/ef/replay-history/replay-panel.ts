@@ -1,5 +1,6 @@
+import { defineElement } from "../../define";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { cssColor } from "../css-safe";
 import { formatReplayInputValue, sliderValueToReplaySpeed } from "./replay-utils";
@@ -174,7 +175,7 @@ export function renderReplayPanel(props: ReplayPanelRenderProps): TemplateResult
   `;
 }
 
-@customElement("easy-floorplan-replay-panel")
+@defineElement("easy-floorplan-replay-panel")
 export class ReplayPanel extends LitElement {
   static styles = css`
     .replay-panel {

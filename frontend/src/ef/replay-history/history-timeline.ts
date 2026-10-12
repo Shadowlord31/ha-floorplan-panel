@@ -1,11 +1,12 @@
+import { defineElement } from "../../define";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { guard } from "lit/directives/guard.js";
-import { customElement, property, state } from "lit/decorators.js";
+import { property, state } from "lit/decorators.js";
 import { resolveReplayEventColor, type HistoryEventInput } from "./history-service";
 import { thinForDisplay } from "./downsample";
 import { SKIN_ACCENT } from "../skins";
 
-@customElement("easy-floorplan-history-timeline")
+@defineElement("easy-floorplan-history-timeline")
 export class HistoryTimeline extends LitElement {
   @property({ attribute: false }) public events: HistoryEventInput[] = [];
   @property({ type: Number }) public startTime = 0;
