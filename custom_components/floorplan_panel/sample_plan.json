@@ -1,521 +1,488 @@
 {
   "version": 1,
-  "canvas": {
+  "ef": {
+    "type": "custom:fp-ef-card",
     "width": 1000,
-    "height": 700
-  },
-  "settings": {
-    "wallThickness": 12,
-    "grid": 10
-  },
-  "floors": [
-    {
-      "id": "wohnung",
-      "name": "Wohnung",
-      "walls": [
-        {
-          "id": "w-nord",
-          "x1": 50,
-          "y1": 50,
-          "x2": 950,
-          "y2": 50,
-          "thickness": 20
-        },
-        {
-          "id": "w-ost",
-          "x1": 950,
-          "y1": 50,
-          "x2": 950,
-          "y2": 650,
-          "thickness": 20
-        },
-        {
-          "id": "w-sued",
-          "x1": 950,
-          "y1": 650,
-          "x2": 50,
-          "y2": 650,
-          "thickness": 20
-        },
-        {
-          "id": "w-west",
-          "x1": 50,
-          "y1": 650,
-          "x2": 50,
-          "y2": 50,
-          "thickness": 20
-        },
-        {
-          "id": "w-mitte",
-          "x1": 550,
-          "y1": 50,
-          "x2": 550,
-          "y2": 650
-        },
-        {
-          "id": "w-wohnen-schlafen",
-          "x1": 50,
-          "y1": 400,
-          "x2": 550,
-          "y2": 400
-        },
-        {
-          "id": "w-kueche-flur",
-          "x1": 550,
-          "y1": 300,
-          "x2": 950,
-          "y2": 300
-        },
-        {
-          "id": "w-flur-bad",
-          "x1": 750,
-          "y1": 300,
-          "x2": 750,
-          "y2": 650
-        }
-      ],
-      "openings": [
-        {
-          "id": "t-eingang",
-          "type": "door",
-          "x": 650,
-          "y": 650,
-          "length": 90,
-          "angle": 0,
-          "hinge": "left",
-          "swing": "out",
-          "entity": "binary_sensor.wohnungstuer",
-          "lockEntity": "lock.wohnungstuer"
-        },
-        {
-          "id": "t-wohnen",
-          "type": "door",
-          "x": 550,
-          "y": 350,
-          "length": 80,
-          "angle": 90,
-          "hinge": "left",
-          "swing": "in"
-        },
-        {
-          "id": "t-schlafen",
-          "type": "door",
-          "x": 550,
-          "y": 520,
-          "length": 80,
-          "angle": 90,
-          "hinge": "right",
-          "swing": "in"
-        },
-        {
-          "id": "t-kueche",
-          "type": "door",
-          "x": 650,
-          "y": 300,
-          "length": 80,
-          "angle": 0,
-          "hinge": "left",
-          "swing": "out"
-        },
-        {
-          "id": "t-bad",
-          "type": "door",
-          "x": 750,
-          "y": 480,
-          "length": 75,
-          "angle": 90,
-          "hinge": "left",
-          "swing": "out"
-        },
-        {
-          "id": "f-wohnen",
-          "type": "window",
-          "x": 300,
-          "y": 50,
-          "length": 180,
-          "angle": 0,
-          "leaves": [
-            {
-              "w": 2,
-              "entity": "binary_sensor.fenster_wohnzimmer_links",
-              "hinge": "left"
-            },
-            {
-              "w": 3,
-              "entity": "binary_sensor.fenster_wohnzimmer_mitte",
-              "hinge": "left"
-            },
-            {
-              "w": 2,
-              "entity": "binary_sensor.fenster_wohnzimmer_rechts",
-              "hinge": "right"
-            }
-          ],
-          "shutters": [
-            {
-              "entity": "cover.wohnzimmer_rollo",
-              "side": "out"
-            }
-          ]
-        },
-        {
-          "id": "f-kueche",
-          "type": "window",
-          "x": 750,
-          "y": 50,
-          "length": 120,
-          "angle": 0,
-          "entity": "binary_sensor.fenster_kueche"
-        },
-        {
-          "id": "f-schlafen",
-          "type": "window",
-          "x": 300,
-          "y": 650,
-          "length": 150,
-          "angle": 0,
-          "entity": "binary_sensor.fenster_schlafzimmer",
-          "swing": "out",
-          "leaves": [
-            {
-              "w": 1,
-              "hinge": "left"
-            },
-            {
-              "w": 1,
-              "hinge": "right"
-            }
-          ],
-          "shutters": [
-            {
-              "entity": "cover.schlafzimmer_rollo",
-              "side": "out"
-            },
-            {
-              "entity": "cover.schlafzimmer_raffrollo",
-              "side": "in",
-              "color": "#b0a090"
-            }
-          ]
-        },
-        {
-          "id": "f-bad",
-          "type": "window",
-          "x": 950,
-          "y": 480,
-          "length": 70,
-          "angle": 90,
-          "entity": "binary_sensor.fenster_bad",
-          "swing": "in",
-          "hinge": "right"
-        }
-      ],
-      "areas": [
-        {
-          "id": "wohnzimmer",
-          "name": "Wohnzimmer",
-          "color": "#4f8bd6",
-          "opacity": 0.12,
-          "points": [
-            {
-              "x": 50,
-              "y": 50
-            },
-            {
-              "x": 550,
-              "y": 50
-            },
-            {
-              "x": 550,
-              "y": 400
-            },
-            {
-              "x": 50,
-              "y": 400
-            }
-          ],
-          "sidebar": [
-            {
-              "entity": "light.wohnzimmer_decke",
-              "name": "Deckenlicht"
-            },
-            {
-              "entity": "light.wohnzimmer_stehlampe",
-              "name": "Stehlampe"
-            },
-            {
-              "entity": "media_player.wohnzimmer_tv",
-              "name": "Fernseher"
-            },
-            {
-              "entity": "cover.wohnzimmer_rollo",
-              "name": "Rollo"
-            },
-            {
-              "entity": "scene.wohnzimmer_filmabend",
-              "name": "Filmabend"
-            },
-            {
-              "entity": "script.wohnzimmer_alles_aus",
-              "name": "Alles aus"
-            }
-          ]
-        },
-        {
-          "id": "kueche",
-          "name": "Küche",
-          "color": "#e0a030",
-          "opacity": 0.12,
-          "points": [
-            {
-              "x": 550,
-              "y": 50
-            },
-            {
-              "x": 950,
-              "y": 50
-            },
-            {
-              "x": 950,
-              "y": 300
-            },
-            {
-              "x": 550,
-              "y": 300
-            }
-          ],
-          "sidebar": [
-            {
-              "entity": "light.kueche",
-              "name": "Licht"
-            },
-            {
-              "entity": "switch.kaffeemaschine",
-              "name": "Kaffeemaschine"
-            }
-          ]
-        },
-        {
-          "id": "flur",
-          "name": "Flur",
-          "color": "#9e9e9e",
-          "opacity": 0.1,
-          "points": [
-            {
-              "x": 550,
-              "y": 300
-            },
-            {
-              "x": 750,
-              "y": 300
-            },
-            {
-              "x": 750,
-              "y": 650
-            },
-            {
-              "x": 550,
-              "y": 650
-            }
-          ],
-          "sidebar": [
-            {
-              "entity": "light.flur",
-              "name": "Licht"
-            },
-            {
-              "entity": "lock.wohnungstuer",
-              "name": "Wohnungstür"
-            }
-          ]
-        },
-        {
-          "id": "bad",
-          "name": "Bad",
-          "color": "#3fb5a8",
-          "opacity": 0.12,
-          "points": [
-            {
-              "x": 750,
-              "y": 300
-            },
-            {
-              "x": 950,
-              "y": 300
-            },
-            {
-              "x": 950,
-              "y": 650
-            },
-            {
-              "x": 750,
-              "y": 650
-            }
-          ],
-          "sidebar": [
-            {
-              "entity": "light.bad",
-              "name": "Licht"
-            },
-            {
-              "entity": "fan.bad_luefter",
-              "name": "Lüfter"
-            }
-          ]
-        },
-        {
-          "id": "schlafzimmer",
-          "name": "Schlafzimmer",
-          "color": "#8e6cc9",
-          "opacity": 0.12,
-          "points": [
-            {
-              "x": 50,
-              "y": 400
-            },
-            {
-              "x": 550,
-              "y": 400
-            },
-            {
-              "x": 550,
-              "y": 650
-            },
-            {
-              "x": 50,
-              "y": 650
-            }
-          ],
-          "sidebar": [
-            {
-              "entity": "light.schlafzimmer",
-              "name": "Licht"
-            },
-            {
-              "entity": "cover.schlafzimmer_rollo",
-              "name": "Rollo"
-            },
-            {
-              "entity": "climate.schlafzimmer",
-              "name": "Heizung"
-            },
-            {
-              "entity": "scene.gute_nacht",
-              "name": "Gute Nacht"
-            }
-          ]
-        }
-      ],
-      "items": [
-        {
-          "id": "i-wz-decke",
-          "x": 300,
-          "y": 225,
-          "icon": "mdi:ceiling-light",
-          "entity": "light.wohnzimmer_decke",
-          "tapAction": "toggle"
-        },
-        {
-          "id": "i-wz-steh",
-          "x": 110,
-          "y": 110,
-          "icon": "mdi:floor-lamp",
-          "entity": "light.wohnzimmer_stehlampe",
-          "tapAction": "toggle",
-          "glowRadius": 110
-        },
-        {
-          "id": "i-wz-tv",
-          "x": 480,
-          "y": 225,
-          "icon": "mdi:television",
-          "entity": "media_player.wohnzimmer_tv",
-          "tapAction": "more-info"
-        },
-        {
-          "id": "i-wz-temp",
-          "x": 110,
-          "y": 340,
-          "icon": "mdi:thermometer",
-          "entity": "sensor.wohnzimmer_temperatur",
-          "showState": true,
-          "showOnlyWhenZoomed": true
-        },
-        {
-          "id": "i-ku-licht",
-          "x": 750,
-          "y": 175,
-          "icon": "mdi:ceiling-light",
-          "entity": "light.kueche",
-          "tapAction": "toggle"
-        },
-        {
-          "id": "i-ku-kaffee",
-          "x": 900,
-          "y": 100,
-          "icon": "mdi:coffee-maker",
-          "entity": "switch.kaffeemaschine",
-          "tapAction": "toggle",
-          "showOnlyWhenZoomed": true
-        },
-        {
-          "id": "i-fl-licht",
-          "x": 650,
-          "y": 475,
-          "icon": "mdi:ceiling-light",
-          "entity": "light.flur",
-          "tapAction": "toggle"
-        },
-        {
-          "id": "i-fl-schloss",
-          "x": 650,
-          "y": 610,
-          "icon": "mdi:lock",
-          "entity": "lock.wohnungstuer",
-          "tapAction": "more-info"
-        },
-        {
-          "id": "i-bad-licht",
-          "x": 850,
-          "y": 400,
-          "icon": "mdi:ceiling-light",
-          "entity": "light.bad",
-          "tapAction": "toggle"
-        },
-        {
-          "id": "i-bad-luefter",
-          "x": 900,
-          "y": 600,
-          "icon": "mdi:fan",
-          "entity": "fan.bad_luefter",
-          "tapAction": "toggle",
-          "showOnlyWhenZoomed": true
-        },
-        {
-          "id": "i-sz-licht",
-          "x": 300,
-          "y": 525,
-          "icon": "mdi:ceiling-light",
-          "entity": "light.schlafzimmer",
-          "tapAction": "toggle"
-        },
-        {
-          "id": "i-sz-heizung",
-          "x": 110,
-          "y": 600,
-          "icon": "mdi:radiator",
-          "entity": "climate.schlafzimmer",
-          "tapAction": "more-info",
-          "showOnlyWhenZoomed": true
-        },
-        {
-          "id": "i-pflanze",
-          "x": 500,
-          "y": 100,
-          "icon": "mdi:flower",
-          "label": "Monstera"
-        }
-      ]
-    }
-  ]
+    "height": 700,
+    "grid": 10,
+    "floors": [
+      {
+        "id": "wohnung",
+        "name": "Wohnung",
+        "walls": [
+          {
+            "id": "w-nord",
+            "x1": 50,
+            "y1": 50,
+            "x2": 950,
+            "y2": 50,
+            "thickness": 20
+          },
+          {
+            "id": "w-ost",
+            "x1": 950,
+            "y1": 50,
+            "x2": 950,
+            "y2": 650,
+            "thickness": 20
+          },
+          {
+            "id": "w-sued",
+            "x1": 950,
+            "y1": 650,
+            "x2": 50,
+            "y2": 650,
+            "thickness": 20
+          },
+          {
+            "id": "w-west",
+            "x1": 50,
+            "y1": 650,
+            "x2": 50,
+            "y2": 50,
+            "thickness": 20
+          },
+          {
+            "id": "w-mitte",
+            "x1": 550,
+            "y1": 50,
+            "x2": 550,
+            "y2": 650
+          },
+          {
+            "id": "w-wohnen-schlafen",
+            "x1": 50,
+            "y1": 400,
+            "x2": 550,
+            "y2": 400
+          },
+          {
+            "id": "w-kueche-flur",
+            "x1": 550,
+            "y1": 300,
+            "x2": 950,
+            "y2": 300
+          },
+          {
+            "id": "w-flur-bad",
+            "x1": 750,
+            "y1": 300,
+            "x2": 750,
+            "y2": 650
+          }
+        ],
+        "openings": [
+          {
+            "id": "t-eingang",
+            "type": "door",
+            "x": 650,
+            "y": 650,
+            "length": 90,
+            "angle": 0,
+            "entity": "binary_sensor.wohnungstuer",
+            "flipV": true
+          },
+          {
+            "id": "t-wohnen",
+            "type": "door",
+            "x": 550,
+            "y": 350,
+            "length": 80,
+            "angle": 90
+          },
+          {
+            "id": "t-schlafen",
+            "type": "door",
+            "x": 550,
+            "y": 520,
+            "length": 80,
+            "angle": 90,
+            "flipH": true
+          },
+          {
+            "id": "t-kueche",
+            "type": "door",
+            "x": 650,
+            "y": 300,
+            "length": 80,
+            "angle": 0,
+            "flipV": true
+          },
+          {
+            "id": "t-bad",
+            "type": "door",
+            "x": 750,
+            "y": 480,
+            "length": 75,
+            "angle": 90,
+            "flipV": true
+          },
+          {
+            "id": "f-wohnen",
+            "type": "window",
+            "x": 300,
+            "y": 50,
+            "length": 180,
+            "angle": 0,
+            "sash": "triple",
+            "entity": "binary_sensor.fenster_wohnzimmer_links",
+            "secondaryEntity": "binary_sensor.fenster_wohnzimmer_mitte",
+            "extraEntities": [
+              "binary_sensor.fenster_wohnzimmer_rechts"
+            ],
+            "leafHinges": [
+              "left",
+              "left",
+              "right"
+            ],
+            "shutterEntity": "cover.wohnzimmer_rollo"
+          },
+          {
+            "id": "f-kueche",
+            "type": "window",
+            "x": 750,
+            "y": 50,
+            "length": 120,
+            "angle": 0,
+            "sash": "single",
+            "entity": "binary_sensor.fenster_kueche"
+          },
+          {
+            "id": "f-schlafen",
+            "type": "window",
+            "x": 300,
+            "y": 650,
+            "length": 150,
+            "angle": 0,
+            "sash": "double",
+            "entity": "binary_sensor.fenster_schlafzimmer",
+            "leafHinges": [
+              "left",
+              "right"
+            ],
+            "shutterEntity": "cover.schlafzimmer_rollo"
+          },
+          {
+            "id": "f-bad",
+            "type": "window",
+            "x": 950,
+            "y": 480,
+            "length": 70,
+            "angle": 90,
+            "sash": "single",
+            "entity": "binary_sensor.fenster_bad"
+          }
+        ],
+        "areas": [
+          {
+            "id": "wohnzimmer",
+            "name": "Wohnzimmer",
+            "points": [
+              {
+                "x": 50,
+                "y": 50
+              },
+              {
+                "x": 550,
+                "y": 50
+              },
+              {
+                "x": 550,
+                "y": 400
+              },
+              {
+                "x": 50,
+                "y": 400
+              }
+            ],
+            "sidebar": [
+              {
+                "entity": "light.wohnzimmer_decke",
+                "name": "Deckenlicht"
+              },
+              {
+                "entity": "light.wohnzimmer_stehlampe",
+                "name": "Stehlampe"
+              },
+              {
+                "entity": "media_player.wohnzimmer_tv",
+                "name": "Fernseher"
+              },
+              {
+                "entity": "cover.wohnzimmer_rollo",
+                "name": "Rollo"
+              },
+              {
+                "entity": "scene.wohnzimmer_filmabend",
+                "name": "Filmabend"
+              },
+              {
+                "entity": "script.wohnzimmer_alles_aus",
+                "name": "Alles aus"
+              }
+            ],
+            "color": "#4f8bd6",
+            "opacity": 0.12
+          },
+          {
+            "id": "kueche",
+            "name": "Küche",
+            "points": [
+              {
+                "x": 550,
+                "y": 50
+              },
+              {
+                "x": 950,
+                "y": 50
+              },
+              {
+                "x": 950,
+                "y": 300
+              },
+              {
+                "x": 550,
+                "y": 300
+              }
+            ],
+            "sidebar": [
+              {
+                "entity": "light.kueche",
+                "name": "Licht"
+              },
+              {
+                "entity": "switch.kaffeemaschine",
+                "name": "Kaffeemaschine"
+              }
+            ],
+            "color": "#e0a030",
+            "opacity": 0.12
+          },
+          {
+            "id": "flur",
+            "name": "Flur",
+            "points": [
+              {
+                "x": 550,
+                "y": 300
+              },
+              {
+                "x": 750,
+                "y": 300
+              },
+              {
+                "x": 750,
+                "y": 650
+              },
+              {
+                "x": 550,
+                "y": 650
+              }
+            ],
+            "sidebar": [
+              {
+                "entity": "light.flur",
+                "name": "Licht"
+              },
+              {
+                "entity": "lock.wohnungstuer",
+                "name": "Wohnungstür"
+              }
+            ],
+            "color": "#9e9e9e",
+            "opacity": 0.1
+          },
+          {
+            "id": "bad",
+            "name": "Bad",
+            "points": [
+              {
+                "x": 750,
+                "y": 300
+              },
+              {
+                "x": 950,
+                "y": 300
+              },
+              {
+                "x": 950,
+                "y": 650
+              },
+              {
+                "x": 750,
+                "y": 650
+              }
+            ],
+            "sidebar": [
+              {
+                "entity": "light.bad",
+                "name": "Licht"
+              },
+              {
+                "entity": "fan.bad_luefter",
+                "name": "Lüfter"
+              }
+            ],
+            "color": "#3fb5a8",
+            "opacity": 0.12
+          },
+          {
+            "id": "schlafzimmer",
+            "name": "Schlafzimmer",
+            "points": [
+              {
+                "x": 50,
+                "y": 400
+              },
+              {
+                "x": 550,
+                "y": 400
+              },
+              {
+                "x": 550,
+                "y": 650
+              },
+              {
+                "x": 50,
+                "y": 650
+              }
+            ],
+            "sidebar": [
+              {
+                "entity": "light.schlafzimmer",
+                "name": "Licht"
+              },
+              {
+                "entity": "cover.schlafzimmer_rollo",
+                "name": "Rollo"
+              },
+              {
+                "entity": "climate.schlafzimmer",
+                "name": "Heizung"
+              },
+              {
+                "entity": "scene.gute_nacht",
+                "name": "Gute Nacht"
+              }
+            ],
+            "color": "#8e6cc9",
+            "opacity": 0.12
+          }
+        ],
+        "items": [
+          {
+            "id": "i-wz-decke",
+            "entity": "light.wohnzimmer_decke",
+            "x": 300,
+            "y": 225,
+            "kind": "light",
+            "icon": "mdi:ceiling-light"
+          },
+          {
+            "id": "i-wz-steh",
+            "entity": "light.wohnzimmer_stehlampe",
+            "x": 110,
+            "y": 110,
+            "kind": "light",
+            "icon": "mdi:floor-lamp",
+            "glow": true,
+            "glowRadius": 110
+          },
+          {
+            "id": "i-wz-tv",
+            "entity": "media_player.wohnzimmer_tv",
+            "x": 480,
+            "y": 225,
+            "kind": "media_player",
+            "icon": "mdi:television"
+          },
+          {
+            "id": "i-wz-temp",
+            "entity": "sensor.wohnzimmer_temperatur",
+            "x": 110,
+            "y": 340,
+            "kind": "sensor",
+            "icon": "mdi:thermometer",
+            "showState": true,
+            "showOnlyWhenZoomed": true
+          },
+          {
+            "id": "i-ku-licht",
+            "entity": "light.kueche",
+            "x": 750,
+            "y": 175,
+            "kind": "light",
+            "icon": "mdi:ceiling-light"
+          },
+          {
+            "id": "i-ku-kaffee",
+            "entity": "switch.kaffeemaschine",
+            "x": 900,
+            "y": 100,
+            "kind": "switch",
+            "icon": "mdi:coffee-maker",
+            "showOnlyWhenZoomed": true
+          },
+          {
+            "id": "i-fl-licht",
+            "entity": "light.flur",
+            "x": 650,
+            "y": 475,
+            "kind": "light",
+            "icon": "mdi:ceiling-light"
+          },
+          {
+            "id": "i-fl-schloss",
+            "entity": "lock.wohnungstuer",
+            "x": 650,
+            "y": 610,
+            "kind": "lock",
+            "icon": "mdi:lock"
+          },
+          {
+            "id": "i-bad-licht",
+            "entity": "light.bad",
+            "x": 850,
+            "y": 400,
+            "kind": "light",
+            "icon": "mdi:ceiling-light"
+          },
+          {
+            "id": "i-bad-luefter",
+            "entity": "fan.bad_luefter",
+            "x": 900,
+            "y": 600,
+            "kind": "fan",
+            "icon": "mdi:fan",
+            "showOnlyWhenZoomed": true
+          },
+          {
+            "id": "i-sz-licht",
+            "entity": "light.schlafzimmer",
+            "x": 300,
+            "y": 525,
+            "kind": "light",
+            "icon": "mdi:ceiling-light"
+          },
+          {
+            "id": "i-sz-heizung",
+            "entity": "climate.schlafzimmer",
+            "x": 110,
+            "y": 600,
+            "kind": "climate",
+            "icon": "mdi:radiator",
+            "showOnlyWhenZoomed": true
+          }
+        ],
+        "texts": [
+          {
+            "id": "i-pflanze",
+            "x": 500,
+            "y": 100,
+            "text": "Monstera"
+          }
+        ]
+      }
+    ]
+  }
 }

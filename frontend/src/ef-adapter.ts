@@ -24,6 +24,11 @@ export const EF_TYPE = "custom:fp-ef-card";
 type EfConfig = Record<string, unknown>;
 type RawPlan = Record<string, unknown> & { ef?: EfConfig };
 
+interface FpCard extends HTMLElement {
+  showRoom(room: string, floor?: string | null): boolean;
+  resetView(): void;
+}
+
 interface CardLike extends HTMLElement {
   setConfig(config: EfConfig): void;
 }
@@ -137,6 +142,35 @@ export class EfHost extends LitElement {
     this._room = a && a.sidebar?.length ? { ...a, name: a.name ?? "", sidebar: a.sidebar } : undefined;
   };
 
+  /** Dienst floorplan_panel.show_room: nur in der Ansicht, nicht im Editor. */
+  public showRoom(room: string, floor?: string | null): boolean {
+    if (this.edit) return false;
+    return this.renderRoot.querySelector<FpCard>("fp-ef-card")?.showRoom(room, floor) ?? false;
+  }
+
+  /** Dienst floorplan_panel.reset_view. */
+  public resetView(): void {
+    if (!this.edit) this.renderRoot.querySelector<FpCard>("fp-ef-card")?.resetView();
+  }
+
+  private _fire(name: string): void {
+    this.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
+  }
+
+  private async _loadSample(): Promise<void> {
+    try {
+      const res = await this.hass.callWS<{ plan: RawPlan; revision: number }>({ type: `${DOMAIN}/plan/load_sample` });
+      this._plan = res.plan;
+      this._rev = res.revision;
+      this.dispatchEvent(
+        new CustomEvent("ef-saved", { detail: { plan: res.plan, revision: res.revision }, bubbles: true, composed: true })
+      );
+    } catch (err: any) {
+      this._status = "error";
+      this._error = err?.message ?? String(err);
+    }
+  }
+
   private _dialog(): HTMLDialogElement | null {
     return this.renderRoot.querySelector<HTMLDialogElement>("dialog.import");
   }
@@ -179,6 +213,20 @@ export class EfHost extends LitElement {
   }
 
   protected render() {
+    if (!this.edit && !this.plan?.ef) {
+      const admin = !!this.hass?.user?.is_admin;
+      return html`<div class="empty">
+        <ha-icon icon="mdi:floor-plan"></ha-icon>
+        <p>Noch kein Grundriss gezeichnet.</p>
+        ${this._status === "error" ? html`<p class="err">${this._error}</p>` : nothing}
+        ${admin
+          ? html`<div class="row">
+              <button class="primary" @click=${() => this._fire("ef-edit-request")}>Editor öffnen</button>
+              <button @click=${this._loadSample}>Beispiel-Grundriss laden</button>
+            </div>`
+          : html`<p>Ein Administrator kann ihn im Editor anlegen oder importieren.</p>`}
+      </div>`;
+    }
     if (!this.edit)
       return html`<fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
         ${this._room
@@ -267,28 +315,38 @@ export class EfHost extends LitElement {
       color: var(--error-color, #db4437);
       margin-top: 8px;
     }
-    .bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 6px 12px;
-      border-bottom: 1px solid var(--divider-color);
+    .empty {
+      margin: auto;
+      text-align: center;
+      color: var(--secondary-text-color);
+      padding: 24px;
     }
-    .bar button {
+    .empty ha-icon {
+      --mdc-icon-size: 64px;
+      opacity: 0.5;
+    }
+    .empty .err {
+      color: var(--error-color, #db4437);
+    }
+    .empty .row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .empty button {
       font: inherit;
-      border: 1px solid var(--primary-color);
-      background: var(--primary-color);
-      color: var(--text-primary-color, #fff);
-      border-radius: 16px;
-      padding: 4px 16px;
+      border: 1px solid var(--divider-color);
+      background: var(--card-background-color);
+      color: var(--primary-text-color);
+      border-radius: 18px;
+      padding: 8px 16px;
       cursor: pointer;
     }
-    .status {
-      color: var(--secondary-text-color);
-      font-size: 13px;
-    }
-    .status.error {
-      color: var(--error-color, #db4437);
+    .empty button.primary {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      color: var(--text-primary-color, #fff);
     }
   `;
 }

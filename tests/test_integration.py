@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import copy
-
 import pytest
 import voluptuous as vol
 
@@ -24,29 +22,28 @@ async def _setup(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
+def _ef_areas(plan: dict) -> list[dict]:
+    return plan["ef"]["floors"][0]["areas"]
+
+
 def test_sample_plan_is_valid() -> None:
     plan = load_sample()
-    floor = plan["floors"][0]
-    assert len(floor["areas"]) == 5
-    assert all(area["sidebar"] for area in floor["areas"])
+    areas = _ef_areas(plan)
+    assert len(areas) == 5
+    assert all(area["sidebar"] for area in areas)
 
 
-def test_schema_rejects_duplicates_and_bad_entities() -> None:
-    plan = load_sample()
-    broken = copy.deepcopy(plan)
-    broken["floors"][0]["walls"].append(copy.deepcopy(broken["floors"][0]["walls"][0]))
+def test_schema_rejects_oversized_ef() -> None:
     with pytest.raises(vol.Invalid):
-        validate_plan(broken)
-    broken = copy.deepcopy(plan)
-    broken["floors"][0]["areas"][0]["sidebar"].append({"entity": "kein entity"})
+        validate_plan({"ef": {"type": "x", "blob": "a" * 2_100_000}})
     with pytest.raises(vol.Invalid):
-        validate_plan(broken)
+        validate_plan({"ef": "kaputt"})
 
 
-def test_schema_drops_unknown_fields() -> None:
-    plan = validate_plan({"floors": [{"id": "eg", "items": [{"id": "i", "x": 1, "y": 2, "furniture": "sofa"}]}]})
-    assert "furniture" not in plan["floors"][0]["items"][0]
-    assert plan["floors"][0]["items"][0]["tapAction"] == "auto"
+def test_schema_drops_old_format_fields() -> None:
+    plan = validate_plan({"canvas": {"width": 5}, "floors": [{"id": "eg"}], "furniture": [], "ef": {"type": "x"}})
+    assert set(plan) == {"version", "ef", "settings"}
+    assert "templates" not in validate_plan({"settings": {"templates": []}})["settings"]
 
 
 async def test_config_flow_single_instance(hass: HomeAssistant) -> None:
@@ -84,7 +81,7 @@ async def test_websocket_roundtrip(hass: HomeAssistant, hass_ws_client, hass_sto
     msg = await ws.receive_json()
     assert msg["success"]
     assert msg["result"]["revision"] == 0
-    assert msg["result"]["plan"]["floors"][0]["walls"] == []
+    assert "ef" not in msg["result"]["plan"]
 
     await ws.send_json({"id": 2, "type": f"{DOMAIN}/plan/load_sample"})
     msg = await ws.receive_json()
@@ -92,7 +89,7 @@ async def test_websocket_roundtrip(hass: HomeAssistant, hass_ws_client, hass_sto
     assert msg["result"]["revision"] == 1
     plan = msg["result"]["plan"]
 
-    plan["floors"][0]["areas"][0]["sidebar"].append({"entity": "light.neu", "name": "Neu"})
+    _ef_areas(plan)[0]["sidebar"].append({"entity": "light.neu", "name": "Neu"})
     await ws.send_json({"id": 3, "type": f"{DOMAIN}/plan/save", "plan": plan, "revision": 1})
     msg = await ws.receive_json()
     assert msg["success"]
@@ -106,7 +103,7 @@ async def test_websocket_roundtrip(hass: HomeAssistant, hass_ws_client, hass_sto
     assert msg["error"]["code"] == "conflict"
 
     # ungültig → abgelehnt
-    await ws.send_json({"id": 5, "type": f"{DOMAIN}/plan/save", "plan": {"floors": "kaputt"}, "revision": 2})
+    await ws.send_json({"id": 5, "type": f"{DOMAIN}/plan/save", "plan": {"ef": "kaputt"}, "revision": 2})
     msg = await ws.receive_json()
     assert msg["error"]["code"] == "invalid_format"
 
@@ -119,7 +116,7 @@ async def test_websocket_roundtrip(hass: HomeAssistant, hass_ws_client, hass_sto
     await ws.send_json({"id": 7, "type": f"{DOMAIN}/history/restore", "history_id": items[-1]["id"]})
     msg = await ws.receive_json()
     assert msg["success"]
-    assert msg["result"]["plan"]["floors"][0]["walls"] == []
+    assert "ef" not in msg["result"]["plan"]
     await hass.async_block_till_done()
 
     assert hass_storage[STORAGE_KEY_PLAN]["data"]["revision"] == 3
@@ -134,7 +131,7 @@ async def test_stored_plan_survives_restart(hass: HomeAssistant, hass_storage) -
     await _setup(hass)
     data = hass.data[DOMAIN]
     assert data.revision == 7
-    assert data.plan["floors"][0]["areas"][0]["name"] == "Wohnzimmer"
+    assert _ef_areas(data.plan)[0]["name"] == "Wohnzimmer"
 
 
 async def test_save_requires_admin(hass: HomeAssistant, hass_ws_client, hass_read_only_access_token) -> None:
@@ -156,151 +153,3 @@ async def test_show_room_service_reaches_subscribers(hass: HomeAssistant, hass_w
     msg = await ws.receive_json()
     assert msg["type"] == "event"
     assert msg["event"] == {"type": "show_room", "room": "Küche", "floor": None}
-
-
-def _plan_with(opening: dict) -> dict:
-    base = {"id": "o", "type": "window", "x": 0, "y": 0, "length": 100}
-    return {"floors": [{"id": "eg", "openings": [{**base, **opening}]}]}
-
-
-def test_schema_window_leaves_shutters_and_glow_fields() -> None:
-    plan = validate_plan(
-        {
-            "floors": [
-                {
-                    "id": "eg",
-                    "openings": [
-                        {
-                            "id": "f",
-                            "type": "window",
-                            "x": 0,
-                            "y": 0,
-                            "length": 100,
-                            "entity": "binary_sensor.fenster",
-                            "leaves": [
-                                {"w": 1, "entity": "binary_sensor.links", "hinge": "left"},
-                                {"w": 2},
-                                {"w": 1, "hinge": "right"},
-                                {"w": 1},
-                            ],
-                            "openColor": "#ff0000",
-                            "shutters": [
-                                {"entity": "cover.aussen", "side": "out", "color": "#8d6e63"},
-                                {"entity": "cover.innen", "side": "in"},
-                            ],
-                        },
-                        # Fenster ohne Kontakt bleibt gültig (nur Warnung im Editor)
-                        {"id": "f2", "type": "window", "x": 0, "y": 0, "length": 100},
-                        {
-                            "id": "t",
-                            "type": "door",
-                            "x": 0,
-                            "y": 0,
-                            "length": 90,
-                            "entity": "binary_sensor.tuer",
-                            "lockEntity": "lock.tuer",
-                        },
-                    ],
-                    "items": [{"id": "l", "x": 1, "y": 1, "entity": "light.a", "glow": True, "glowRadius": 200, "glowColor": "#ffd9a0"}],
-                }
-            ]
-        }
-    )
-    window, _, door = plan["floors"][0]["openings"]
-    assert len(window["leaves"]) == 4
-    assert window["leaves"][0]["entity"] == "binary_sensor.links"
-    assert [s["side"] for s in window["shutters"]] == ["out", "in"]
-    assert door["lockEntity"] == "lock.tuer"
-    assert plan["floors"][0]["items"][0]["glowRadius"] == 200
-
-
-def test_schema_migrates_old_window_and_door_format() -> None:
-    plan = validate_plan(
-        {
-            "floors": [
-                {
-                    "id": "eg",
-                    "openings": [
-                        {
-                            "id": "f",
-                            "type": "window",
-                            "x": 0,
-                            "y": 0,
-                            "length": 100,
-                            "sashes": 2,
-                            "shutterEntity": "cover.rollo",
-                            "shutterColor": "#111111",
-                        },
-                        {"id": "t", "type": "door", "x": 0, "y": 0, "length": 90, "entity": "lock.tuer"},
-                    ],
-                }
-            ]
-        }
-    )
-    window, door = plan["floors"][0]["openings"]
-    assert [leaf["w"] for leaf in window["leaves"]] == [1, 1]
-    assert [leaf["hinge"] for leaf in window["leaves"]] == ["left", "right"]
-    assert window["shutters"] == [{"entity": "cover.rollo", "side": "out", "color": "#111111"}]
-    assert "sashes" not in window and "shutterEntity" not in window
-    assert door["lockEntity"] == "lock.tuer"
-    assert "entity" not in door
-
-
-@pytest.mark.parametrize(
-    "opening",
-    [
-        {"leaves": [{"w": 1}] * 5},
-        {"leaves": []},
-        {"leaves": [{"w": 0}]},
-        {"leaves": [{"w": 1, "entity": "light.kein_sensor"}]},
-        {"entity": "light.kein_sensor"},
-        {"lockEntity": "switch.kein_schloss"},
-        {"shutters": [{"entity": "light.kein_rollo", "side": "out"}]},
-        {"shutters": [{"entity": "cover.a", "side": "left"}]},
-        {"shutters": [{"entity": "cover.a", "side": "in"}, {"entity": "cover.b", "side": "in"}]},
-        {"openColor": "red;background:url(x)"},
-    ],
-)
-def test_schema_rejects_bad_opening_fields(opening: dict) -> None:
-    with pytest.raises(vol.Invalid):
-        validate_plan(_plan_with(opening))
-
-
-def test_schema_furniture_library_and_placed_items() -> None:
-    plan = validate_plan(
-        {
-            "furniture": [
-                {
-                    "id": "lampe",
-                    "name": "Stehlampe",
-                    "parts": [
-                        {"id": "p1", "shape": "circle", "x": 0, "y": 0, "r": 15, "fill": "#888"},
-                        {"id": "p2", "shape": "path", "x": 0, "y": 0, "w": 20, "h": 20, "d": "M0 0 L10 0 Z", "vb": [0, 0, 10, 10]},
-                    ],
-                    "lights": [{"x": 0, "y": -10}],
-                }
-            ],
-            "floors": [{"id": "eg", "items": [{"id": "i", "x": 1, "y": 2, "furnitureType": "lampe", "rotation": 90, "scale": 1.5}]}],
-        }
-    )
-    assert plan["furniture"][0]["lights"] == [{"x": 0.0, "y": -10.0}]
-    assert plan["floors"][0]["items"][0]["furnitureType"] == "lampe"
-    assert validate_plan({})["furniture"] == []
-
-
-@pytest.mark.parametrize(
-    "part",
-    [
-        {"id": "p", "shape": "path", "x": 0, "y": 0, "d": "M0 0 <script>"},
-        {"id": "p", "shape": "blob", "x": 0, "y": 0},
-        {"id": "p", "shape": "polygon", "x": 0, "y": 0, "points": [{"x": 0, "y": 0}]},
-    ],
-)
-def test_schema_rejects_bad_furniture_parts(part: dict) -> None:
-    with pytest.raises(vol.Invalid):
-        validate_plan({"furniture": [{"id": "m", "name": "M", "parts": [part]}]})
-
-
-def test_schema_rejects_duplicate_furniture_ids() -> None:
-    with pytest.raises(vol.Invalid):
-        validate_plan({"furniture": [{"id": "m", "name": "A"}, {"id": "m", "name": "B"}]})

@@ -6,9 +6,11 @@ import { defineElement } from "./define";
 import { LitElement, css, html, nothing } from "lit";
 import { property } from "lit/decorators.js";
 import type { HomeAssistant } from "./ha";
-import { POPUP_NARROW_PX, POPUP_WIDTH_PX } from "./plan-view";
 import "./room-sidebar";
 import type { Area } from "./types";
+
+export const POPUP_WIDTH_PX = 380;
+export const POPUP_NARROW_PX = 700;
 
 @defineElement("fp-room-dialog")
 export class FpRoomDialog extends LitElement {

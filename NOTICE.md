@@ -18,9 +18,6 @@ Copyright (c) 2026 Nicolas Sandller, MIT-Lizenz.
   Weitere Anpassungen (Adapter zum Panel, Speichern über WebSocket) sind im jeweiligen
   Dateikopf bzw. in `frontend/src/ef-adapter.ts` vermerkt.
 
-Weitere Konzepte (Zoom-auf-Raum, Lichtschein, Datenmodell-Idee) in den eigenen Dateien
-stammen ebenfalls aus diesem Projekt.
-
 ## Haus3d-HomeAssistant
 
 Copyright (c) 2026 tollzockt, MIT-Lizenz, https://github.com/tollzockt/Haus3d-HomeAssistant
@@ -64,3 +61,5 @@ Ab v0.17.0 zusätzlich: Anschlag je Flügel (`leafHinges`) in `types.ts`, `rende
 Ab v0.18.0 zusätzlich: Panel-Modus des Editors (`panelMode`, `panelError`, Ereignis `ef-done`; immer Vollbild, "Fertig" statt "Expand") in `frontend/src/ef/editor.ts` (markiert mit `floorplan-panel`).
 
 Ab v0.19.0 zusätzlich: einmaliger Import einer bestehenden easy-floorplan-Konfiguration (`frontend/src/ef-import.ts`, Dialog in `ef-adapter.ts`, Knopf „Import“ im Panel-Modus des Editors). Neue Abhängigkeit: js-yaml (MIT).
+
+Ab v0.20.0 zusätzlich: Dienste `show_room`/`reset_view` als `showRoom()`/`resetView()` an `fp-ef-card` (`frontend/src/ef/floorplan-card.ts`, markiert mit `floorplan-panel`). Der frühere eigene Editor/Renderer (Möbel-Bibliothek, SVG-Import, eigene Öffnungs-/Lichtlogik) wurde entfernt; `ef-furniture/*` und `ef/symbols.ts` ersetzen ihn.

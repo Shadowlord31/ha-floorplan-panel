@@ -622,6 +622,41 @@ export class FloorplanCard extends LitElement {
     this._replayController.resetForFloorChange();
   }
 
+  /** floorplan-panel: service floorplan_panel.show_room — jump to a room (id or name) and zoom in. */
+  public showRoom(room: string, floorId?: string | null): boolean {
+    if (!this._config) return false;
+    const floors = getFloors(this._config);
+    const needle = room.toLowerCase();
+    for (const floor of floors) {
+      if (floorId && floor.id !== floorId) continue;
+      const area = floor.areas.find((x) => x.id === room || (x.name ?? "").toLowerCase() === needle);
+      if (!area) continue;
+      this._goToFloor(floors, floor.id);
+      this._zoomedAreaId = area.id;
+      this._emitAreaTap(area.id, true);
+      return true;
+    }
+    return false;
+  }
+
+  /** floorplan-panel: service floorplan_panel.reset_view — zoom back out. */
+  public resetView(): void {
+    if (!this._zoomedAreaId) return;
+    const id = this._zoomedAreaId;
+    this._zoomedAreaId = undefined;
+    this._emitAreaTap(id, false);
+  }
+
+  private _emitAreaTap(areaId: string, zoomed: boolean): void {
+    this.dispatchEvent(
+      new CustomEvent("fp-area-tap", {
+        detail: { areaId, floorId: this._activeFloorId, zoomed },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   /** Tapping a room zooms the plan in to it; tapping the same room again zooms back out. */
   private _onAreaClick(a: Area): void {
     this._zoomedAreaId = this._zoomedAreaId === a.id ? undefined : a.id;
