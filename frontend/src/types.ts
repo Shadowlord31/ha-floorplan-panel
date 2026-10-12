@@ -1,5 +1,5 @@
 /**
- * Raum-Datenmodell für Raum-Popup und Seitenleiste (`room-dialog.ts`, `room-sidebar.ts`).
+ * Raum-Datenmodell für feste Seitenleiste (`room-sidebar.ts`).
  * Der Grundriss selbst liegt als Karten-Konfiguration des Ports unter `plan.ef`.
  */
 

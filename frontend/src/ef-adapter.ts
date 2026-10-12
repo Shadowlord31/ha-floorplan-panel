@@ -12,13 +12,15 @@ import { property, state } from "lit/decorators.js";
 import { defineElement } from "./define";
 import "./ef/floorplan-card";
 import "./ef/editor";
-import "./room-dialog";
+import "./room-sidebar";
 import type { HomeAssistant } from "./ha";
 import type { Area as PanelArea } from "./types";
 import { parseEfImport, type EfImport } from "./ef-import";
 
 const DOMAIN = "floorplan_panel";
 const SAVE_DELAY_MS = 800;
+const NARROW_PX = 700;
+const AUTO_RESET_MS = 5 * 60 * 1000;
 export const EF_TYPE = "custom:fp-ef-card";
 
 type EfConfig = Record<string, unknown>;
@@ -48,6 +50,9 @@ export class EfHost extends LitElement {
   @state() private _status: "" | "saving" | "saved" | "error" = "";
   @state() private _error = "";
   @state() private _room?: PanelArea;
+  @state() private _narrow = false;
+  private _resetTimer?: ReturnType<typeof setTimeout>;
+  private _ro?: ResizeObserver;
   @state() private _importText = "";
   @state() private _importError = "";
 
@@ -84,8 +89,16 @@ export class EfHost extends LitElement {
     }
   }
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    this._ro = new ResizeObserver(() => (this._narrow = this.clientWidth < NARROW_PX));
+    this._ro.observe(this);
+  }
+
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._ro?.disconnect();
+    clearTimeout(this._resetTimer);
     if (this._pending) void this._flush();
   }
 
@@ -140,6 +153,28 @@ export class EfHost extends LitElement {
     const lists = [...(cfg?.floors ?? []).map((f) => f.areas ?? []), cfg?.areas ?? []];
     const a = zoomed ? lists.flat().find((x) => x?.id === areaId) : undefined;
     this._room = a && a.sidebar?.length ? { ...a, name: a.name ?? "", sidebar: a.sidebar } : undefined;
+    this._armResetTimer();
+  };
+
+  /** Auto-Reset: ohne Bedienung der Seitenleiste springt die Ansicht nach 5 Minuten zur Übersicht (derselbe Weg wie der Dienst reset_view). */
+  private _armResetTimer = (): void => {
+    clearTimeout(this._resetTimer);
+    if (!this._room) return;
+    const ms = Number(localStorage.getItem("fp-reset-ms")) || AUTO_RESET_MS;
+    this._resetTimer = setTimeout(() => this.resetView(), ms);
+  };
+
+  private _rooms(): PanelArea[] {
+    const cfg = this.plan?.ef as { floors?: { areas?: any[] }[]; areas?: any[] } | undefined;
+    return [...(cfg?.floors ?? []).flatMap((f) => f.areas ?? []), ...(cfg?.areas ?? [])]
+      .filter((a) => a?.sidebar?.length)
+      .map((a) => ({ ...a, name: a.name ?? a.id, sidebar: a.sidebar }));
+  }
+
+  private _closeRoom = (): void => {
+    this.resetView();
+    this._room = undefined;
+    clearTimeout(this._resetTimer);
   };
 
   /** Dienst floorplan_panel.show_room: nur in der Ansicht, nicht im Editor. */
@@ -150,7 +185,10 @@ export class EfHost extends LitElement {
 
   /** Dienst floorplan_panel.reset_view. */
   public resetView(): void {
-    if (!this.edit) this.renderRoot.querySelector<FpCard>("fp-ef-card")?.resetView();
+    if (this.edit) return;
+    this.renderRoot.querySelector<FpCard>("fp-ef-card")?.resetView();
+    this._room = undefined;
+    clearTimeout(this._resetTimer);
   }
 
   private _fire(name: string): void {
@@ -212,6 +250,17 @@ export class EfHost extends LitElement {
     this.dispatchEvent(new CustomEvent("ef-close", { bubbles: true, composed: true }));
   }
 
+  private _renderIdle() {
+    const rooms = this._rooms();
+    return html`<div class="idle">
+      <h3>Übersicht</h3>
+      <p>Raum im Plan antippen, um seine Geräte, Szenen und Skripte zu sehen.</p>
+      ${rooms.map(
+        (r) => html`<button @click=${() => this.showRoom(r.id)}><ha-icon icon="mdi:floor-plan"></ha-icon>${r.name}</button>`
+      )}
+    </div>`;
+  }
+
   protected render() {
     if (!this.edit && !this.plan?.ef) {
       const admin = !!this.hass?.user?.is_admin;
@@ -228,10 +277,19 @@ export class EfHost extends LitElement {
       </div>`;
     }
     if (!this.edit)
-      return html`<fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
-        ${this._room
-          ? html`<fp-room-dialog .hass=${this.hass} .area=${this._room} @close=${() => (this._room = undefined)}></fp-room-dialog>`
-          : nothing}`;
+      return html`<div class="layout ${this._narrow ? "narrow" : ""}">
+        <fp-ef-card @fp-area-tap=${this._onAreaTap}></fp-ef-card>
+        <aside class="side" @pointerdown=${this._armResetTimer} @keydown=${this._armResetTimer} @change=${this._armResetTimer}>
+          ${this._room
+            ? html`<fp-room-sidebar
+                .hass=${this.hass}
+                .area=${this._room}
+                .canEdit=${false}
+                @close=${this._closeRoom}
+              ></fp-room-sidebar>`
+            : this._renderIdle()}
+        </aside>
+      </div>`;
     return html`
       <fp-ef-editor
         .panelMode=${true}
@@ -269,6 +327,66 @@ export class EfHost extends LitElement {
       display: flex;
       flex-direction: column;
       min-height: 0;
+    }
+    .layout {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: row;
+    }
+    .layout.narrow {
+      flex-direction: column;
+    }
+    .layout fp-ef-card {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+    }
+    .side {
+      flex: none;
+      width: 380px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: auto;
+      border-left: 1px solid var(--divider-color);
+      background: var(--card-background-color, #fff);
+    }
+    .layout.narrow .side {
+      width: auto;
+      height: 40%;
+      border-left: none;
+      border-top: 1px solid var(--divider-color);
+    }
+    .side fp-room-sidebar {
+      flex: 1;
+      min-height: 0;
+    }
+    .idle {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .idle h3 {
+      margin: 0;
+    }
+    .idle p {
+      margin: 0 0 8px;
+      color: var(--secondary-text-color);
+    }
+    .idle button {
+      font: inherit;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--divider-color);
+      background: none;
+      color: var(--primary-text-color);
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      text-align: left;
     }
     fp-ef-card,
     fp-ef-editor {

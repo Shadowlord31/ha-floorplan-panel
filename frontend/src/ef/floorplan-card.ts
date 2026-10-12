@@ -616,6 +616,8 @@ export class FloorplanCard extends LitElement {
     const wasSameFloor = this._activeFloorId === id;
     this._activeFloorId = id;
     lastViewedFloor.set(floorMemoryKey(floors), id);
+    // floorplan-panel: tell the host the zoomed room is gone, so its sidebar returns to the overview
+    if (this._zoomedAreaId) this._emitAreaTap(this._zoomedAreaId, false);
     this._zoomedAreaId = undefined;
 
     if (wasSameFloor || !this.hass || !this._config?.historyReplay?.enabled) return;
