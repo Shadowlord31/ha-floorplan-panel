@@ -156,6 +156,12 @@ export class FloorplanPanel extends LitElement {
       color: var(--primary-text-color);
       font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
     }
+    :host([kiosk]) {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      height: auto;
+    }
     :host([kiosk]) .toolbar {
       display: none;
     }
