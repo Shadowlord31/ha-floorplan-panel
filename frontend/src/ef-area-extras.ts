@@ -5,43 +5,20 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property } from "lit/decorators.js";
 import { defineElement } from "./define";
-import "./entity-picker";
-import { entityIcon, entityKind, friendlyName, type HomeAssistant } from "./ha";
+import "./card-list-editor";
+import type { HomeAssistant } from "./ha";
 import { axisRect } from "./geometry";
 import { AREA_TYPES } from "./types";
 
-type Entry = { entity: string; name?: string; icon?: string };
-type AreaLike = { points?: { x: number; y: number }[]; type?: string; typeLabel?: string; sidebar?: Entry[] };
+type AreaLike = { points?: { x: number; y: number }[]; type?: string; typeLabel?: string; cards?: Record<string, unknown>[] };
 
 @defineElement("fp-ef-area-extras")
 export class FpEfAreaExtras extends LitElement {
   @property({ attribute: false }) hass!: HomeAssistant;
   @property({ attribute: false }) area!: AreaLike;
 
-  private get _list(): Entry[] {
-    return this.area.sidebar ?? [];
-  }
-
   private _patch(patch: Record<string, unknown>): void {
     this.dispatchEvent(new CustomEvent("area-patch", { detail: patch, bubbles: true, composed: true }));
-  }
-
-  private _setSidebar(list: Entry[]): void {
-    this._patch({ sidebar: list.length ? list : undefined });
-  }
-
-  private _move(i: number, dir: -1 | 1): void {
-    const list = this._list.map((e) => ({ ...e }));
-    const [e] = list.splice(i, 1);
-    list.splice(i + dir, 0, e!);
-    this._setSidebar(list);
-  }
-
-  private _rename(i: number, name: string): void {
-    const list = this._list.map((e) => ({ ...e }));
-    if (name) list[i]!.name = name;
-    else delete list[i]!.name;
-    this._setSidebar(list);
   }
 
   private _resize(width: number, height: number): void {
@@ -56,7 +33,6 @@ export class FpEfAreaExtras extends LitElement {
   protected render() {
     const a = this.area;
     const rect = a.points && axisRect(a.points);
-    const list = this._list;
     return html`
       <label class="field">
         <span>Type</span>
@@ -85,34 +61,17 @@ export class FpEfAreaExtras extends LitElement {
           </div>`
         : nothing}
       <h4>Sidebar</h4>
-      <p class="muted">Only what is listed here appears when the room is tapped: devices, scenes and scripts.</p>
-      ${list.map(
-        (e, i) => html`<div class="row">
-          <ha-icon .icon=${entityIcon(this.hass, e.entity, e.icon)}></ha-icon>
-          <div class="main">
-            <input
-              type="text"
-              .value=${e.name ?? ""}
-              placeholder=${friendlyName(this.hass, e.entity)}
-              @change=${(ev: Event) => this._rename(i, (ev.target as HTMLInputElement).value.trim())}
-            />
-            <small>${e.entity} · ${{ device: "device", scene: "scene", script: "script" }[entityKind(e.entity)]}${this.hass.states[e.entity] ? "" : " · not found"}</small>
-          </div>
-          <button title="Up" ?disabled=${i === 0} @click=${() => this._move(i, -1)}><ha-icon icon="mdi:chevron-up"></ha-icon></button>
-          <button title="Down" ?disabled=${i === list.length - 1} @click=${() => this._move(i, 1)}><ha-icon icon="mdi:chevron-down"></ha-icon></button>
-          <button title="Remove" @click=${() => this._setSidebar(list.filter((_, j) => j !== i))}><ha-icon icon="mdi:close"></ha-icon></button>
-        </div>`
-      )}
-      <fp-entity-picker
+      <fp-card-list-editor
+        summary
         .hass=${this.hass}
-        .exclude=${list.map((e) => e.entity)}
-        clearOnSelect
-        placeholder="Add device, scene or script …"
-        @value-changed=${(ev: CustomEvent<{ value: string }>) => {
+        .cards=${a.cards}
+        heading="Karten von ${(a as { name?: string }).name ?? "Raum"}"
+        hint="Diese Karten erscheinen in der Seitenleiste, wenn der Raum angetippt wird."
+        @cards-changed=${(ev: CustomEvent<{ cards: Record<string, unknown>[] }>) => {
           ev.stopPropagation();
-          if (ev.detail.value) this._setSidebar([...list, { entity: ev.detail.value }]);
+          this._patch({ cards: ev.detail.cards.length ? ev.detail.cards : undefined });
         }}
-      ></fp-entity-picker>
+      ></fp-card-list-editor>
     `;
   }
 
@@ -150,30 +109,6 @@ export class FpEfAreaExtras extends LitElement {
     small {
       color: var(--secondary-text-color);
       font-size: 12px;
-    }
-    .row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-    .main {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
-    button {
-      border: none;
-      background: none;
-      color: inherit;
-      cursor: pointer;
-      padding: 4px;
-      line-height: 0;
-    }
-    button:disabled {
-      opacity: 0.3;
-      cursor: default;
     }
   `;
 }

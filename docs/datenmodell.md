@@ -34,7 +34,7 @@ eigenen Formats (`canvas`, `floors`, `furniture`, `settings.templates`) werden s
 
 Das Format ist das von easy-floorplan (siehe `NOTICE.md`). Eigene Ergänzungen, jeweils mit `floorplan-panel` im Quelltext markiert:
 
-- Räume: `type` (`room`, `balcony`, `hallway`, `staircase`, `bathroom`, `custom`) und `typeLabel` bei `custom`; Balkone werden gestrichelt gezeichnet. `sidebar`: Liste `{entity, name?, icon?}`; ein Tipp auf den Raum öffnet sie im Popup. Rechteck-Werkzeug im Raum-Modus des Editors.
+- Räume: `type` (`room`, `balcony`, `hallway`, `staircase`, `bathroom`, `custom`) und `typeLabel` bei `custom`; Balkone werden gestrichelt gezeichnet. `cards`: Liste beliebiger Lovelace-Karten (max. 20), die ein Tipp auf den Raum in der Seitenleiste zeigt. Altes `sidebar` (`{entity, name?, icon?}`) wird beim Laden einmalig in eine `entities`-Karte (Titel = Raumname) umgewandelt. Rechteck-Werkzeug im Raum-Modus des Editors.
 - Öffnungen mit bis zu vier Flügeln: `sash` (`single`, `double`, `triple`, `quad`), Sensoren in `entity` (Flügel 1), `secondaryEntity` (2) und `extraEntities` (3, 4). Anschlag je Flügel in `leafHinges` (`left`/`right`/`""`; Standard: alle links, der letzte rechts). Ein Flügel ohne Sensor folgt Flügel 1.
 - Panel-Modus des Editors (Vollbild, „Fertig“) und einmaliger Import einer vorhandenen `custom:easy-floorplan-card` (YAML/JSON, auch als Dashboard-Ausschnitt): `type` wird auf `custom:fp-ef-card` gesetzt, der Rest 1:1 übernommen. Ergebnis ist nur ein Entwurf; gespeichert wird erst mit „Apply“/„Fertig“.
 

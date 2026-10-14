@@ -1,20 +1,11 @@
 /**
- * Raum-Datenmodell für feste Seitenleiste (`room-sidebar.ts`).
+ * Raum-Datenmodell für Seitenleiste mit freien Karten (`room-sidebar.ts`).
  * Der Grundriss selbst liegt als Karten-Konfiguration des Ports unter `plan.ef`.
  */
 
 export interface Point {
   x: number;
   y: number;
-}
-
-/** Ein Eintrag der Raum-Seitenleiste: Entität, Szene oder Skript. */
-export interface SidebarEntry {
-  entity: string;
-  /** Anzeigename; ohne Wert der friendly_name der Entität. */
-  name?: string;
-  /** Icon-Überschreibung; ohne Wert das Icon der Entität. */
-  icon?: string;
 }
 
 export const AREA_TYPES = [
@@ -34,5 +25,6 @@ export interface Area {
   points: Point[];
   type?: AreaType;
   typeLabel?: string;
-  sidebar: SidebarEntry[];
+  /** Lovelace-Karten der Raum-Seitenleiste. */
+  cards: Record<string, unknown>[];
 }

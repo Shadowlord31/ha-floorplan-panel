@@ -1126,8 +1126,8 @@ export interface Area {
   type?: string;
   /** floorplan-panel: free label when type is "custom". */
   typeLabel?: string;
-  /** floorplan-panel: entities shown in the room sidebar. */
-  sidebar?: { entity: string; name?: string; icon?: string }[];
+  /** floorplan-panel: Lovelace cards shown in the room sidebar. */
+  cards?: Record<string, unknown>[];
   /** Vertices in drawing order, virtual canvas units. Implicitly closed (last -> first). */
   points: AreaPoint[];
   /** Display name. Mirrors the linked HA area's name when `haArea` is set. */
