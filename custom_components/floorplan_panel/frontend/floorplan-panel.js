@@ -6714,7 +6714,7 @@ let fe = class extends ce {
       requestUpdate: () => this.requestUpdate()
     }), this._onOrientation = (e) => {
       this._portrait = e.matches;
-    }, this._featuresOf = (e) => this.hass?.states[e]?.attributes?.supported_features ?? 0;
+    }, this._featuresOf = (e) => this.hass?.states[e]?.attributes?.supported_features ?? 0, this._lastAreaTapAt = 0;
   }
   _syncHistoryServiceContext() {
     this._replayController.syncHistoryServiceContext();
@@ -7001,15 +7001,15 @@ let fe = class extends ce {
       })
     );
   }
-  /** Tapping a room zooms the plan in to it; tapping the same room again zooms back out. */
   _onAreaClick(e) {
-    this._zoomedAreaId = this._zoomedAreaId === e.id ? void 0 : e.id, this.dispatchEvent(
+    const t = Date.now();
+    e.id === this._lastAreaTapId && t - this._lastAreaTapAt < 350 || (this._lastAreaTapAt = t, this._lastAreaTapId = e.id, this._zoomedAreaId = this._zoomedAreaId === e.id ? void 0 : e.id, this.dispatchEvent(
       new CustomEvent("fp-area-tap", {
         detail: { areaId: e.id, floorId: this._activeFloorId, zoomed: this._zoomedAreaId === e.id },
         bubbles: !0,
         composed: !0
       })
-    );
+    ));
   }
   /**
    * A gesture on a room (issue #181): its configured action, or — for a tap

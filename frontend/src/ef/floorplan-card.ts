@@ -661,7 +661,15 @@ export class FloorplanCard extends LitElement {
   }
 
   /** Tapping a room zooms the plan in to it; tapping the same room again zooms back out. */
+  private _lastAreaTapAt = 0;
+  private _lastAreaTapId?: string;
+
   private _onAreaClick(a: Area): void {
+    // floorplan-panel: Ghost-Tap-Schutz – ein zweiter Tap auf dieselbe Fläche innerhalb von 350 ms zählt nicht
+    const now = Date.now();
+    if (a.id === this._lastAreaTapId && now - this._lastAreaTapAt < 350) return;
+    this._lastAreaTapAt = now;
+    this._lastAreaTapId = a.id;
     this._zoomedAreaId = this._zoomedAreaId === a.id ? undefined : a.id;
     // floorplan-panel: lets the host open its room sidebar
     this.dispatchEvent(
