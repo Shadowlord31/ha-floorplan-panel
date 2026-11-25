@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Grundriss ohne HA (Spike)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#1c1c1c;color:#ddd;font-family:sans-serif;
+    --primary-color:#03a9f4;--primary-text-color:#e1e1e1;--secondary-text-color:#9b9b9b;
+    --card-background-color:#1c1c1c;--ha-card-background:#1c1c1c;--divider-color:#444}
+  #bar{padding:6px 10px;font-size:13px;display:flex;gap:12px;align-items:center}
+  #plan{height:calc(100% - 36px)}
+</style></head>
+<body><div id="bar"><b>Spike: Grundriss ohne Home Assistant</b><span id="info"></span>
+<label>Helligkeit <input id="br" type="range" min="1" max="255" value="255"></label></div>
+<div id="plan"></div><script type="module" src="./main.ts"></script></body></html>
