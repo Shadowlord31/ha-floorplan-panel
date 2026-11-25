@@ -1,0 +1,37 @@
+name: Kern-Release
+
+on:
+  push:
+    tags: ["core-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Kern bauen (Größenprüfung inklusive)
+        run: npm run build:core
+      - name: Eingecheckte Kern-Dateien sind aktuell
+        run: git diff --exit-code -- ../core-dist
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            ../core-dist/floorplan-core.js \
+            ../core-dist/floorplan-core.js.sha256 \
+            ../core-dist/LICENSES.txt \
+            --title "Kern $GITHUB_REF_NAME" \
+            --notes "floorplan-core.js (ein ES-Modul) mit Prüfsumme und Lizenzen. Siehe docs/core-adapter.md."
