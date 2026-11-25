@@ -102,5 +102,5 @@ npm run build:core   # schreibt ../core-dist/floorplan-core.js, .sha256 und LICE
 npm run test:core    # baut und prüft im headless Chromium (Playwright nötig, Screenshot nach docs/core/core-test.png)
 ```
 
-Der Build bricht ab, wenn `floorplan-core.js` größer als 300 KB wird, wenn mehr als eine Datei entsteht oder wenn Editor-Code im Bundle landet.
+Der Build bricht ab, wenn `floorplan-core.js` größer als 300 KB wird oder mehr als eine Datei entsteht. `test:core` prüft zusätzlich, dass kein Editor-Text im Bundle steht.
 `test:core` braucht `playwright-core` und einen Chromium (Umgebungsvariablen `PW_MODULE`, `CHROMIUM_PATH`).
