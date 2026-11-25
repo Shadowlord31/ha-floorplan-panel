@@ -1,0 +1,78 @@
+floorplan-core.js – Drittanbieter-Lizenzen
+
+== easy-floorplan (Quellcode-Port: Karte, Renderer, Möbelsymbole) ==
+Copyright (c) 2026 Nicolas Sandller, https://github.com/Vombato/easy-floorplan
+Ursprung: Version 0.7.2, Commit e9178c9401a359410efcc7d88f9fee81615db149 (angepasst für fp-ef-card)
+
+MIT License
+
+Copyright (c) 2026 Nicolas Sandller
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Eigene Erweiterungen in den übernommenen Dateien (v0.15.0)
+
+In `frontend/src/ef/editor.ts` und `types.ts` sind folgende Zusätze mit dem Kommentar `floorplan-panel` markiert: Vorlagen (`config.templates`), Ausrichtungslinien (`_alignedSnap`) und Kontextmenü (`_renderContextMenu`).
+
+## Eigene Erweiterungen (v0.16.0)
+
+Drei und vier Flügel für Fenster/Türen (`sash: "triple" | "quad"`, `extraEntities`) in `frontend/src/ef/types.ts`, `render.ts`, `floorplan-card.ts`, `editor-forms.ts` und `editor.ts`, jeweils mit dem Kommentar `floorplan-panel` markiert.
+
+Ab v0.17.0 zusätzlich: Anschlag je Flügel (`leafHinges`) in `types.ts`, `render.ts`, `editor-forms.ts`, `editor.ts` (markiert mit `floorplan-panel`).
+
+Ab v0.18.0 zusätzlich: Panel-Modus des Editors (`panelMode`, `panelError`, Ereignis `ef-done`; immer Vollbild, "Fertig" statt "Expand") in `frontend/src/ef/editor.ts` (markiert mit `floorplan-panel`).
+
+Ab v0.19.0 zusätzlich: einmaliger Import einer bestehenden easy-floorplan-Konfiguration (`frontend/src/ef-import.ts`, Dialog in `ef-adapter.ts`, Knopf „Import“ im Panel-Modus des Editors). Neue Abhängigkeit: js-yaml (MIT).
+
+Ab v0.20.0 zusätzlich: Dienste `show_room`/`reset_view` als `showRoom()`/`resetView()` an `fp-ef-card` (`frontend/src/ef/floorplan-card.ts`, markiert mit `floorplan-panel`). Der frühere eigene Editor/Renderer (Möbel-Bibliothek, SVG-Import, eigene Öffnungs-/Lichtlogik) wurde entfernt; `ef-furniture/*` und `ef/symbols.ts` ersetzen ihn.
+
+== Lit (lit, @lit/reactive-element, lit-html) ==
+BSD 3-Clause License
+
+Copyright (c) 2017 Google LLC. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+== Material Design Icons (@mdi/svg, Pfaddaten) ==
+Die Pfad-Tabelle `icons` einer Plan-Exportdatei enthält SVG-Pfade von Material Design Icons
+(Copyright Pictogrammers, Lizenz Apache-2.0, https://github.com/Templarian/MaterialDesign).
+Sie stammen aus der Exportdatei, nicht aus dieser Datei; floorplan-core.js enthält keine Icon-Bibliothek.

@@ -3,6 +3,7 @@ import { LitElement, html, css, svg, nothing, type TemplateResult, type Property
 import { property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
+import type { KernOptionen } from "../core/optionen";
 import type {
   HomeAssistant,
   FloorplanCardConfig,
@@ -173,6 +174,8 @@ export class FloorplanCard extends LitElement {
   private static _nextGlowId = 0;
 
   @property({ attribute: false }) public hass?: HomeAssistant;
+  /** Kiosk-Optionen des Kerns (floorplan-core); ohne Angabe gilt das bisherige Verhalten. */
+  @property({ attribute: false }) public optionen?: KernOptionen;
   @state() private _config?: FloorplanCardConfig;
   /** View-state: which floor is shown. Never persisted to config. */
   @state() private _activeFloorId?: string;
@@ -1020,7 +1023,7 @@ export class FloorplanCard extends LitElement {
     // no sun dimming never reads these walls, and this is on the path of every
     // state change the card takes.
     const castsLight = c.sunDimming || active.items.some((it) => it.glow);
-    const lightWalls = castsLight
+    const lightWalls = castsLight && this.optionen?.wandverdeckung !== false
       ? wallsLightPassesThrough(active.walls, active.openings, (o) =>
           // Both leaves, and the travel each style actually has (issue #145):
           // asking `entity` alone left a door whose *second* panel was open
@@ -1036,7 +1039,9 @@ export class FloorplanCard extends LitElement {
             this._openingMore(o, renderHass)?.map((m) => m.amount)
           )
         )
-      : active.walls;
+      : this.optionen?.wandverdeckung === false
+        ? undefined
+        : active.walls;
     // Lit rooms hold back the night (issue #113): without this the flat dim
     // multiplies the lit-vs-unlit contrast too, and a lamp ends up *less*
     // visible after dark than at noon.
@@ -1207,10 +1212,10 @@ export class FloorplanCard extends LitElement {
               active.furniture, c.width, c.height,
               `${this._glowIdBase}-mask`, symbolCatalog(c.symbols)
             )}
-            <g class="fp-glows"
+            <g class="fp-glows${this.optionen?.schein === "einfach" ? " schein-einfach" : ""}"
                mask=${active.furniture.length ? `url(#${this._glowIdBase}-mask)` : nothing}>
               ${active.items.map((it, i) => {
-                if (!it.glow) return nothing;
+                if (!it.glow || this.optionen?.schein === "aus") return nothing;
                 const paint = glowPaint(it, renderHass?.states[it.entity]);
                 // Walls block the pool (issue #108) — light stops at the room.
                 return paint
@@ -1893,6 +1898,9 @@ export class FloorplanCard extends LitElement {
          inside the pool — devices stop responding under a lit lamp, and in
          the editor whole rooms become unselectable (issue #108). */
       pointer-events: none;
+    }
+    .schein-einfach .fp-glow {
+      mix-blend-mode: normal;
     }
     .fp-glow {
       mix-blend-mode: screen;
