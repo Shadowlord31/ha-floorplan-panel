@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Kern-Test</title>
+<style>html,body{margin:0;background:#1c1c1c;color:#eee;font-family:sans-serif}#plan{width:1100px;height:760px;--primary-text-color:#eee;--card-background-color:#262626}</style></head>
+<body><div id="plan"></div>
+<script type="module">
+import * as Kern from "/floorplan-core.js";
+const beispiel = await (await fetch("/sample_plan.json")).json();
+const ef = structuredClone(beispiel.ef);
+const fl = ef.floors[0];
+fl.furniture = [
+  { id: "m1", type: "sofa", x: 200, y: 330, w: 190, h: 70 }, { id: "m2", type: "table", x: 250, y: 200, w: 110, h: 60 },
+  { id: "m3", type: "tv", x: 470, y: 225, w: 70, h: 20, angle: 90 }, { id: "m4", type: "rug", x: 180, y: 250, w: 220, h: 120 },
+  { id: "m5", type: "fridge", x: 600, y: 80, w: 60, h: 60 }, { id: "m6", type: "stove", x: 680, y: 80, w: 70, h: 60 },
+  { id: "m7", type: "bed", x: 200, y: 480, w: 160, h: 190 }, { id: "m8", type: "wardrobe", x: 80, y: 560, w: 50, h: 120 },
+  { id: "m9", type: "bathtub", x: 790, y: 560, w: 140, h: 70 }, { id: "m10", type: "toilet", x: 880, y: 330, w: 40, h: 50 },
+];
+for (const it of fl.items) if (it.kind === "light") it.glow = true;
+const plan = { format: "fp-export", version: 1, plan: { version: 1, ef, settings: {} } };
+
+const ICONS = { "mdi:lightbulb": "M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z" };
+const zustaende = {};
+const hoerer = new Set();
+const aktionen = [];
+const lichter = fl.items.filter((i) => i.kind === "light" && i.entity).map((i) => i.entity);
+lichter.forEach((id, n) => (zustaende[id] = { state: n % 3 === 2 ? "off" : "on", attributes: { brightness: [255, 160, 90][n % 3], rgb_color: [[255, 190, 110], [200, 225, 255], [255, 120, 160]][n % 3] } }));
+for (const it of fl.items) if (it.entity && !zustaende[it.entity]) zustaende[it.entity] = { state: "off", attributes: {} };
+const adapter = {
+  zustand: (id) => zustaende[id],
+  abonnieren(ids, rueckruf) { const h = { ids: new Set(ids), rueckruf }; hoerer.add(h); return () => hoerer.delete(h); },
+  aktion(id, a) { aktionen.push([id, a]); },
+  plan_laden: () => plan,
+  plan_speichern() {},
+  icon: (n) => (n.includes("light") ? ICONS["mdi:lightbulb"] : undefined),
+  name: (id) => id,
+};
+const setze = (id, zustand) => { zustaende[id] = zustand; for (const h of hoerer) if (h.ids.has(id)) h.rueckruf(id); };
+window.test = { Kern, adapter, plan, lichter, aktionen, setze, ansicht: null, zaehler: 0 };
+window.test.starte = async (optionen) => {
+  if (window.test.ansicht) window.test.ansicht.trennen();
+  const a = await Kern.zeigePlan(document.getElementById("plan"), adapter, optionen);
+  window.test.ansicht = a; window.test.zaehler = 0;
+  const alt = a.karte.updated.bind(a.karte);
+  a.karte.updated = (c) => { window.test.zaehler++; return alt(c); };
+  await a.karte.updateComplete;
+  return true;
+};
+window.bereit = true;
+</script></body></html>
