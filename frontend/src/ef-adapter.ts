@@ -18,6 +18,7 @@ import type { Area as PanelArea } from "./types";
 import "./card-list-editor";
 import { migrateEfCards } from "./area-cards";
 import { parseEfImport, type EfImport } from "./ef-import";
+import { baueExport, parseExport } from "./core/plan-export";
 
 const DOMAIN = "floorplan_panel";
 const SAVE_DELAY_MS = 800;
@@ -248,6 +249,46 @@ export class EfHost extends LitElement {
     this._dialog()?.close();
   }
 
+  private _exportPlan = async (): Promise<void> => {
+    try {
+      const doc = await baueExport((this._plan ?? this.plan ?? {}) as Record<string, unknown>);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `grundriss-export-${doc.erstellt.slice(0, 10)}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err: any) {
+      this._status = "error";
+      this._error = err?.message ?? String(err);
+    }
+  };
+
+  private _importPlanFile = async (ev: Event): Promise<void> => {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    try {
+      const doc = parseExport(await file.text(), file.size);
+      if (!confirm("Den aktuellen Grundriss durch den Inhalt der Datei ersetzen?")) return;
+      const res = await this.hass.callWS<{ plan: RawPlan; revision: number }>({
+        type: `${DOMAIN}/plan/save`,
+        plan: doc.plan,
+        revision: this._rev,
+      });
+      this._plan = res.plan;
+      this._rev = res.revision;
+      this._status = "saved";
+      this.dispatchEvent(
+        new CustomEvent("ef-saved", { detail: { plan: res.plan, revision: res.revision }, bubbles: true, composed: true })
+      );
+    } catch (err: any) {
+      this._status = "error";
+      this._error = err?.message ?? String(err);
+    }
+  };
+
   private async _close(): Promise<void> {
     if (this._pending) {
       try {
@@ -293,9 +334,20 @@ export class EfHost extends LitElement {
           <ha-icon icon="mdi:pencil"></ha-icon>Übersicht-Karten
         </button>`
       : nothing;
+    const tools = admin
+      ? html`<div class="tools">
+          <button class="cards-edit" title="Plan als JSON-Datei exportieren" @click=${this._exportPlan}>
+            <ha-icon icon="mdi:export"></ha-icon>Plan exportieren
+          </button>
+          <label class="cards-edit" title="Plan aus einer Exportdatei importieren">
+            <ha-icon icon="mdi:import"></ha-icon>Plan importieren
+            <input type="file" accept="application/json,.json" hidden @change=${this._importPlanFile} />
+          </label>
+        </div>`
+      : nothing;
     if (cards.length)
       return html`<div class="idle">
-        ${cards.map((c) => html`<hui-card .hass=${this.hass} .config=${c}></hui-card>`)} ${edit}
+        ${cards.map((c) => html`<hui-card .hass=${this.hass} .config=${c}></hui-card>`)} ${edit} ${tools}
       </div>`;
     return html`<div class="idle">
       <h3>Übersicht</h3>
@@ -303,7 +355,7 @@ export class EfHost extends LitElement {
       ${rooms.map(
         (r) => html`<button @click=${() => this.showRoom(r.id)}><ha-icon icon="mdi:floor-plan"></ha-icon>${r.name}</button>`
       )}
-      ${edit}
+      ${edit} ${tools}
     </div>`;
   }
 
@@ -427,6 +479,19 @@ export class EfHost extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    .idle .tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .idle label.cards-edit {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--divider-color);
+      border-radius: 12px;
+      cursor: pointer;
     }
     .idle .cards-edit {
       align-self: flex-start;
